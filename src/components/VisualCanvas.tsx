@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import type { MutableRefObject } from "react";
 import {
   BLEND_MODE_TO_INDEX,
   getColorStops,
@@ -14,6 +15,7 @@ interface VisualCanvasProps {
   noiseConfig: NoiseConfig;
   gradientConfig: GradientConfig;
   paused: boolean;
+  captureSnapshotRef?: MutableRefObject<(() => string | undefined) | null>;
 }
 
 interface RendererState {
@@ -185,6 +187,7 @@ export function VisualCanvas({
   gradientConfig,
   noiseConfig,
   paused,
+  captureSnapshotRef,
 }: VisualCanvasProps) {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const rendererRef = useRef<RendererState | null>(null);
@@ -316,6 +319,37 @@ export function VisualCanvas({
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     };
 
+    const captureSnapshot = () => {
+      const canvas = canvasRef.current;
+      if (!canvas || !canvas.width || !canvas.height) {
+        return undefined;
+      }
+
+      renderFrame(lastElapsedRef.current);
+
+      const aspectRatio = canvas.width / canvas.height;
+      const targetWidth = 320;
+      const targetHeight = Math.max(1, Math.round(targetWidth / aspectRatio));
+      const snapshotCanvas = document.createElement("canvas");
+      snapshotCanvas.width = targetWidth;
+      snapshotCanvas.height = targetHeight;
+
+      const context = snapshotCanvas.getContext("2d");
+      if (!context) {
+        return canvas.toDataURL("image/png");
+      }
+
+      context.imageSmoothingEnabled = true;
+      context.imageSmoothingQuality = "high";
+      context.drawImage(canvas, 0, 0, targetWidth, targetHeight);
+
+      return snapshotCanvas.toDataURL("image/jpeg", 0.88);
+    };
+
+    if (captureSnapshotRef) {
+      captureSnapshotRef.current = captureSnapshot;
+    }
+
     const resizeCanvas = () => {
       const canvas = canvasRef.current;
       if (!canvas) {
@@ -414,6 +448,16 @@ export function VisualCanvas({
         rendererRef.current = null;
       };
     }, []);
+
+    useEffect(() => {
+      if (!captureSnapshotRef) {
+        return;
+      }
+
+      return () => {
+        captureSnapshotRef.current = null;
+      };
+    }, [captureSnapshotRef]);
 
     useEffect(() => {
       if (paused) {

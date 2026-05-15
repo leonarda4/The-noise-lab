@@ -1,6 +1,5 @@
 import { useState } from "react";
 import type { SavedPreset } from "../types";
-import { approximatePresetBackground } from "../utils/randomize";
 
 interface PresetCardProps {
   preset: SavedPreset;
@@ -18,7 +17,11 @@ export function PresetCard({
   const [isEditing, setIsEditing] = useState(false);
   const [draftName, setDraftName] = useState(preset.name);
 
-  const createdAt = new Date(preset.createdAt).toLocaleString();
+  const createdAt = new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  }).format(new Date(preset.createdAt));
 
   const submitRename = () => {
     const nextName = draftName.trim();
@@ -33,17 +36,12 @@ export function PresetCard({
 
   return (
     <article className="preset-card">
-      <button
-        className="preset-preview"
-        onClick={() => onRestore(preset)}
-        style={
-          preset.thumbnail
-            ? undefined
-            : { background: approximatePresetBackground(preset.gradient, preset.color) }
-        }
-        type="button"
-      >
-        {preset.thumbnail ? <img alt={preset.name} src={preset.thumbnail} /> : null}
+      <button className="preset-preview" onClick={() => onRestore(preset)} type="button">
+        {preset.thumbnail ? (
+          <img alt={preset.name} src={preset.thumbnail} />
+        ) : (
+          <span className="preset-preview-placeholder">Open to refresh snapshot</span>
+        )}
       </button>
 
       <div className="preset-body">
@@ -69,15 +67,11 @@ export function PresetCard({
           </button>
         )}
 
-        <p className="preset-meta">
-          {preset.noise.type} • {preset.gradient.type} • {preset.color.colorwayId}
-        </p>
+        <p className="preset-meta">{preset.noise.type} / {preset.gradient.type}</p>
+        <p className="preset-meta">{preset.color.colorwayId}</p>
         <p className="preset-date">{createdAt}</p>
 
         <div className="preset-actions">
-          <button className="small-button" onClick={() => onRestore(preset)} type="button">
-            Load
-          </button>
           <button
             className="small-button"
             onClick={() => {

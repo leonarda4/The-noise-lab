@@ -21,6 +21,8 @@ interface GradientPanelProps {
   onGradientTypeChange: (type: GradientType) => void;
   onMovementChange: (movement: GradientMovement) => void;
   onParamChange: (key: GradientParamKey, value: number) => void;
+  isOpen?: boolean;
+  onToggle?: () => void;
 }
 
 export function GradientPanel({
@@ -28,6 +30,8 @@ export function GradientPanel({
   onGradientTypeChange,
   onMovementChange,
   onParamChange,
+  isOpen = true,
+  onToggle,
 }: GradientPanelProps) {
   const controls = getGradientControls(gradientConfig.type);
   const sharedControls = controls.filter((control) =>
@@ -38,54 +42,47 @@ export function GradientPanel({
   );
 
   return (
-    <section className="floating-panel gradient-panel">
-      <div className="panel-header">
-        <h2 className="panel-title">Gradient</h2>
-      </div>
+    <section className={`control-panel gradient-panel ${isOpen ? "is-open" : "is-collapsed"}`}>
+      <button
+        aria-expanded={isOpen}
+        className="panel-tab"
+        onClick={onToggle}
+        type="button"
+      >
+        <span>Gradient</span>
+        <span className="panel-tab-caret" aria-hidden="true" />
+      </button>
 
-      <div className="panel-block">
-        <ParameterControl
-          definition={{
-            key: "gradientType",
-            kind: "select",
-            label: "Gradient type",
-            options: GRADIENT_OPTIONS,
-          }}
-          onChange={(value) => onGradientTypeChange(value as GradientType)}
-          value={gradientConfig.type}
-        />
-      </div>
-
-      <div className="panel-block">
-        <ParameterControl
-          definition={{
-            key: "movement",
-            kind: "select",
-            label: "Movement",
-            options: MOVEMENT_OPTIONS,
-          }}
-          onChange={(value) => onMovementChange(value as GradientMovement)}
-          value={gradientConfig.movement}
-        />
-      </div>
-
-      <div className="panel-block">
-        <div className="control-stack">
-          {sharedControls.map((control) => (
-            <ParameterControl
-              definition={control}
-              key={control.key}
-              onChange={(value) => onParamChange(control.key, Number(value))}
-              value={gradientConfig.params[control.key]}
-            />
-          ))}
+      <div className="panel-surface">
+        <div className="panel-block">
+          <ParameterControl
+            definition={{
+              key: "gradientType",
+              kind: "select",
+              label: "Gradient type",
+              options: GRADIENT_OPTIONS,
+            }}
+            onChange={(value) => onGradientTypeChange(value as GradientType)}
+            value={gradientConfig.type}
+          />
         </div>
-      </div>
 
-      {typeSpecificControls.length ? (
+        <div className="panel-block">
+          <ParameterControl
+            definition={{
+              key: "movement",
+              kind: "select",
+              label: "Movement",
+              options: MOVEMENT_OPTIONS,
+            }}
+            onChange={(value) => onMovementChange(value as GradientMovement)}
+            value={gradientConfig.movement}
+          />
+        </div>
+
         <div className="panel-block">
           <div className="control-stack">
-            {typeSpecificControls.map((control) => (
+            {sharedControls.map((control) => (
               <ParameterControl
                 definition={control}
                 key={control.key}
@@ -95,7 +92,22 @@ export function GradientPanel({
             ))}
           </div>
         </div>
-      ) : null}
+
+        {typeSpecificControls.length ? (
+          <div className="panel-block">
+            <div className="control-stack">
+              {typeSpecificControls.map((control) => (
+                <ParameterControl
+                  definition={control}
+                  key={control.key}
+                  onChange={(value) => onParamChange(control.key, Number(value))}
+                  value={gradientConfig.params[control.key]}
+                />
+              ))}
+            </div>
+          </div>
+        ) : null}
+      </div>
     </section>
   );
 }

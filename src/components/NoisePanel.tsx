@@ -10,6 +10,8 @@ interface NoisePanelProps {
   noiseConfig: NoiseConfig;
   onTypeChange: (type: NoiseType) => void;
   onParamChange: (key: NoiseParamKey, value: number) => void;
+  isOpen?: boolean;
+  onToggle?: () => void;
 }
 
 const SHARED_NOISE_KEYS = new Set(
@@ -20,6 +22,8 @@ export function NoisePanel({
   noiseConfig,
   onParamChange,
   onTypeChange,
+  isOpen = true,
+  onToggle,
 }: NoisePanelProps) {
   const definition = getNoiseDefinition(noiseConfig.type);
   const sharedControls = definition.controls.filter((control) =>
@@ -30,41 +34,34 @@ export function NoisePanel({
   );
 
   return (
-    <section className="floating-panel noise-panel">
-      <div className="panel-header">
-        <h2 className="panel-title">Noise</h2>
-      </div>
+    <section className={`control-panel noise-panel ${isOpen ? "is-open" : "is-collapsed"}`}>
+      <button
+        aria-expanded={isOpen}
+        className="panel-tab"
+        onClick={onToggle}
+        type="button"
+      >
+        <span>Noise</span>
+        <span className="panel-tab-caret" aria-hidden="true" />
+      </button>
 
-      <div className="panel-block">
-        <ParameterControl
-          definition={{
-            key: "noiseType",
-            kind: "select",
-            label: "Noise type",
-            options: NOISE_OPTIONS,
-          }}
-          onChange={(value) => onTypeChange(value as NoiseType)}
-          value={noiseConfig.type}
-        />
-      </div>
-
-      <div className="panel-block">
-        <div className="control-stack">
-          {sharedControls.map((control) => (
-            <ParameterControl
-              definition={control}
-              key={control.key}
-              onChange={(value) => onParamChange(control.key, Number(value))}
-              value={noiseConfig.params[control.key]}
-            />
-          ))}
+      <div className="panel-surface">
+        <div className="panel-block">
+          <ParameterControl
+            definition={{
+              key: "noiseType",
+              kind: "select",
+              label: "Noise type",
+              options: NOISE_OPTIONS,
+            }}
+            onChange={(value) => onTypeChange(value as NoiseType)}
+            value={noiseConfig.type}
+          />
         </div>
-      </div>
 
-      {specificControls.length ? (
         <div className="panel-block">
           <div className="control-stack">
-            {specificControls.map((control) => (
+            {sharedControls.map((control) => (
               <ParameterControl
                 definition={control}
                 key={control.key}
@@ -74,7 +71,22 @@ export function NoisePanel({
             ))}
           </div>
         </div>
-      ) : null}
+
+        {specificControls.length ? (
+          <div className="panel-block">
+            <div className="control-stack">
+              {specificControls.map((control) => (
+                <ParameterControl
+                  definition={control}
+                  key={control.key}
+                  onChange={(value) => onParamChange(control.key, Number(value))}
+                  value={noiseConfig.params[control.key]}
+                />
+              ))}
+            </div>
+          </div>
+        ) : null}
+      </div>
     </section>
   );
 }

@@ -41,13 +41,32 @@ import { randomizeCurrentConfiguration } from "./utils/randomize";
 const makePresetId = () =>
   `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 
+const mergePresetThumbnails = (
+  presets: SavedPreset[],
+  cachedPresets: SavedPreset[],
+) => {
+  const cachedThumbnailsById = new Map(
+    cachedPresets
+      .filter((preset) => preset.thumbnail)
+      .map((preset) => [preset.id, preset.thumbnail]),
+  );
+
+  return presets.map((preset) => ({
+    ...preset,
+    thumbnail: preset.thumbnail ?? cachedThumbnailsById.get(preset.id),
+  }));
+};
+
 export default function App() {
   const [noiseConfig, setNoiseConfig] = useState(DEFAULT_NOISE_CONFIG);
   const [gradientConfig, setGradientConfig] = useState(DEFAULT_GRADIENT_CONFIG);
   const [colorConfig, setColorConfig] = useState(DEFAULT_COLOR_CONFIG);
   const [favourites, setFavourites] = useState<SavedPreset[]>([]);
   const [paused, setPaused] = useState(false);
-  const [favouritesOpen, setFavouritesOpen] = useState(true);
+  const [presetsDrawerOpen, setPresetsDrawerOpen] = useState(false);
+  const [noisePanelOpen, setNoisePanelOpen] = useState(true);
+  const [gradientPanelOpen, setGradientPanelOpen] = useState(true);
+  const [colorPanelOpen, setColorPanelOpen] = useState(true);
   const [statusMessage, setStatusMessage] = useState(
     "Live controls update the field immediately.",
   );
@@ -55,6 +74,8 @@ export default function App() {
   const hasPersistedRef = useRef(false);
   const presetsReadyRef = useRef(false);
   const skipNextPresetSyncRef = useRef(true);
+  const captureSnapshotRef = useRef<(() => string | undefined) | null>(null);
+  const pendingThumbnailPresetIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     let isCancelled = false;
@@ -68,7 +89,7 @@ export default function App() {
       }
 
       if (repoPresets) {
-        setFavourites(repoPresets);
+        setFavourites(mergePresetThumbnails(repoPresets, cachedPresets));
         setStatusMessage(
           `Loaded ${repoPresets.length} preset${repoPresets.length === 1 ? "" : "s"} from repo JSON.`,
         );
@@ -128,6 +149,29 @@ export default function App() {
       }
     })();
   }, [favourites]);
+
+  useEffect(() => {
+    const pendingPresetId = pendingThumbnailPresetIdRef.current;
+    if (!pendingPresetId) {
+      return;
+    }
+
+    const frameId = requestAnimationFrame(() => {
+      const thumbnail = captureSnapshotRef.current?.();
+      if (!thumbnail) {
+        return;
+      }
+
+      setFavourites((previous) =>
+        previous.map((preset) =>
+          preset.id === pendingPresetId ? { ...preset, thumbnail } : preset,
+        ),
+      );
+      pendingThumbnailPresetIdRef.current = null;
+    });
+
+    return () => cancelAnimationFrame(frameId);
+  }, [colorConfig, gradientConfig, noiseConfig]);
 
   const handleNoiseTypeChange = (type: NoiseType) => {
     setNoiseConfig((previous) => createNoiseConfig(type, previous));
@@ -252,6 +296,7 @@ export default function App() {
 
   const handleSaveCurrent = () => {
     const createdAt = new Date().toISOString();
+    const thumbnail = captureSnapshotRef.current?.();
     const preset: SavedPreset = {
       id: makePresetId(),
       name: formatPresetLabel(noiseConfig.type, gradientConfig.type, createdAt),
@@ -259,13 +304,15 @@ export default function App() {
       noise: cloneNoiseConfig(noiseConfig),
       gradient: cloneGradientConfig(gradientConfig),
       color: cloneColorConfig(colorConfig),
+      thumbnail,
     };
     setFavourites((previous) => [preset, ...previous]);
     setStatusMessage(`Saved preset "${preset.name}".`);
-    setFavouritesOpen(true);
+    setPresetsDrawerOpen(true);
   };
 
   const handleRestorePreset = (preset: SavedPreset) => {
+    pendingThumbnailPresetIdRef.current = preset.thumbnail ? null : preset.id;
     setNoiseConfig(cloneNoiseConfig(preset.noise));
     setGradientConfig(cloneGradientConfig(preset.gradient));
     setColorConfig(cloneColorConfig(createColorConfig(preset.color)));
@@ -316,7 +363,7 @@ export default function App() {
       setStatusMessage(
         `Imported ${imported.length} preset${imported.length === 1 ? "" : "s"} and queued repo JSON sync.`,
       );
-      setFavouritesOpen(true);
+      setPresetsDrawerOpen(true);
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Unable to import the selected JSON file.";
@@ -328,52 +375,31 @@ export default function App() {
     <div className="app-shell">
       <VisualCanvas
         colorConfig={colorConfig}
+        captureSnapshotRef={captureSnapshotRef}
         gradientConfig={gradientConfig}
         noiseConfig={noiseConfig}
         paused={paused}
       />
 
-      <header className="topbar">
-        <div className="topbar-brand">
-          <h1>The noise lab</h1>
-        </div>
+      <header className="app-header">
+        <p className="brand-mark">The noise lab</p>
 
-        <div className="topbar-actions">
-          <div className="utility-actions">
-            <button className="text-button" onClick={handleRandomize} type="button">
-              Randomize
-            </button>
-            <button className="text-button" onClick={handleReset} type="button">
-              Reset
-            </button>
-            <button className="text-button" onClick={() => setPaused((value) => !value)} type="button">
-              {paused ? "Resume" : "Pause"}
-            </button>
-          </div>
+        <div className="control-dock">
+          <NoisePanel
+            noiseConfig={noiseConfig}
+            onParamChange={handleNoiseParamChange}
+            onTypeChange={handleNoiseTypeChange}
+            isOpen={noisePanelOpen}
+            onToggle={() => setNoisePanelOpen((value) => !value)}
+          />
 
-          <button className="primary-button save-button" onClick={handleSaveCurrent} type="button">
-            Save preset
-          </button>
-        </div>
-      </header>
-
-      <div aria-live="polite" className="visually-hidden">
-        {statusMessage}
-      </div>
-
-      <main className="overlay-layout">
-        <NoisePanel
-          noiseConfig={noiseConfig}
-          onParamChange={handleNoiseParamChange}
-          onTypeChange={handleNoiseTypeChange}
-        />
-
-        <div className="right-panel-stack">
           <GradientPanel
             gradientConfig={gradientConfig}
             onGradientTypeChange={handleGradientTypeChange}
             onMovementChange={handleMovementChange}
             onParamChange={handleGradientParamChange}
+            isOpen={gradientPanelOpen}
+            onToggle={() => setGradientPanelOpen((value) => !value)}
           />
 
           <ColorPanel
@@ -384,20 +410,51 @@ export default function App() {
             onCustomStopChange={handleCustomStopChange}
             onParamChange={handleColorParamChange}
             onRemoveCustomStop={handleRemoveCustomStop}
+            isOpen={colorPanelOpen}
+            onToggle={() => setColorPanelOpen((value) => !value)}
           />
         </div>
+      </header>
 
-        <SavedPresetsPanel
-          favourites={favourites}
-          isOpen={favouritesOpen}
-          onDelete={handleDeletePreset}
-          onExport={handleExport}
-          onImport={handleImport}
-          onRename={handleRenamePreset}
-          onRestore={handleRestorePreset}
-          onToggle={() => setFavouritesOpen((value) => !value)}
-        />
-      </main>
+      <div aria-live="polite" className="visually-hidden">
+        {statusMessage}
+      </div>
+
+      <SavedPresetsPanel
+        favourites={favourites}
+        isOpen={presetsDrawerOpen}
+        onDelete={handleDeletePreset}
+        onExport={handleExport}
+        onImport={handleImport}
+        onRename={handleRenamePreset}
+        onRestore={handleRestorePreset}
+        onToggle={() => setPresetsDrawerOpen((value) => !value)}
+      />
+
+      <div className="bottom-controls">
+        <div className="utility-controls">
+          <button className="utility-button" onClick={handleRandomize} type="button">
+            Randomize
+          </button>
+          <button className="utility-button" onClick={handleReset} type="button">
+            Reset
+          </button>
+          <button
+            className="utility-button"
+            onClick={() => setPaused((value) => !value)}
+            type="button"
+          >
+            {paused ? "Resume" : "Pause"}
+          </button>
+          <button
+            className="utility-button is-emphasized"
+            onClick={handleSaveCurrent}
+            type="button"
+          >
+            Save preset
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

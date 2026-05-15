@@ -20,7 +20,7 @@ export function ParameterControl<TKey extends string>({
 }: ParameterControlProps<TKey>) {
   if (definition.kind === "toggle") {
     return (
-      <label className="control-card control-toggle">
+      <label className="control-card control-card--toggle control-toggle">
         <div>
           <div className="control-label">{definition.label}</div>
           {definition.helperText ? (
@@ -40,7 +40,7 @@ export function ParameterControl<TKey extends string>({
 
   if (definition.kind === "select") {
     return (
-      <label className="control-card">
+      <label className="control-card control-card--select">
         <div className="control-row">
           <span className="control-label">{definition.label}</span>
         </div>
@@ -63,7 +63,7 @@ export function ParameterControl<TKey extends string>({
   }
 
   return (
-    <label className="control-card">
+    <label className="control-card control-card--range">
       <div className="control-row">
         <span className="control-label">{definition.label}</span>
         <span className="control-value">{formatValue(Number(value))}</span>

@@ -66,13 +66,13 @@ const isFiniteNumber = (value: unknown): value is number =>
 const isStringArray = (value: unknown): value is string[] =>
   Array.isArray(value) && value.every((entry) => typeof entry === "string");
 
-const sanitizePreset = (preset: SavedPreset): SavedPreset => {
+const stripPresetThumbnail = (preset: SavedPreset): SavedPreset => {
   const { thumbnail: _thumbnail, ...rest } = preset;
   return rest;
 };
 
-const sanitizePresets = (presets: SavedPreset[]): SavedPreset[] =>
-  presets.map(sanitizePreset);
+const stripPresetThumbnails = (presets: SavedPreset[]): SavedPreset[] =>
+  presets.map(stripPresetThumbnail);
 
 const normalizeParams = <TKey extends string>(
   keys: TKey[],
@@ -244,7 +244,7 @@ export const loadPresets = (): SavedPreset[] => {
     if (!Array.isArray(parsed)) {
       return [];
     }
-    return sanitizePresets(parsed.map(normalizePreset).filter(Boolean) as SavedPreset[]);
+    return parsed.map(normalizePreset).filter(Boolean) as SavedPreset[];
   } catch {
     return [];
   }
@@ -255,21 +255,20 @@ const normalizePresets = (value: unknown): SavedPreset[] => {
   if (!Array.isArray(source)) {
     return [];
   }
-  return sanitizePresets(source.map(normalizePreset).filter(Boolean) as SavedPreset[]);
+  return source.map(normalizePreset).filter(Boolean) as SavedPreset[];
 };
 
 export { type SavePresetsResult };
 
 export const savePresets = (presets: SavedPreset[]): SavePresetsResult => {
-  const sanitized = sanitizePresets(presets);
   try {
-    localStorage.setItem(PRESETS_STORAGE_KEY, JSON.stringify(sanitized));
+    localStorage.setItem(PRESETS_STORAGE_KEY, JSON.stringify(presets));
     return "full";
   } catch {
     try {
       localStorage.setItem(
         PRESETS_STORAGE_KEY,
-        JSON.stringify(sanitized),
+        JSON.stringify(stripPresetThumbnails(presets)),
       );
       return "without-thumbnails";
     } catch {
@@ -303,7 +302,7 @@ export const syncRepoPresets = async (presets: SavedPreset[]) => {
       body: JSON.stringify({
         version: PRESET_SCHEMA_VERSION,
         updatedAt: new Date().toISOString(),
-        presets: sanitizePresets(presets),
+        presets: stripPresetThumbnails(presets),
       }),
     });
     return response.ok;
@@ -317,7 +316,7 @@ export const exportPresets = (presets: SavedPreset[]) => {
     {
       version: PRESET_SCHEMA_VERSION,
       exportedAt: new Date().toISOString(),
-      presets: sanitizePresets(presets),
+      presets: stripPresetThumbnails(presets),
     },
     null,
     2,
