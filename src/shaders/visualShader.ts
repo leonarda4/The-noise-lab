@@ -15,6 +15,9 @@ varying vec2 v_uv;
 
 uniform vec2 u_resolution;
 uniform float u_time;
+uniform float u_noisePhase;
+uniform float u_movementPhase;
+uniform float u_gradientPhase;
 
 uniform int u_noiseType;
 uniform int u_gradientType;
@@ -337,30 +340,29 @@ vec3 applyColorAdjustments(vec3 color) {
   return saturateVec3(color);
 }
 
-vec2 applyMovement(vec2 p, float time) {
-  float speed = 0.25 + u_movementSpeed * 0.6;
+vec2 applyMovement(vec2 p, float phase) {
   if (u_movementType == 1) {
-    p *= 0.88 + sin(time * speed) * 0.14;
+    p *= 0.88 + sin(phase) * 0.14;
   } else if (u_movementType == 2) {
-    p *= 1.12 - sin(time * speed) * 0.14;
+    p *= 1.12 - sin(phase) * 0.14;
   } else if (u_movementType == 3) {
-    p += vec2(-time * speed * 0.08, 0.0);
+    p += vec2(-phase * 0.08, 0.0);
   } else if (u_movementType == 4) {
-    p += vec2(time * speed * 0.08, 0.0);
+    p += vec2(phase * 0.08, 0.0);
   } else if (u_movementType == 5) {
-    p += vec2(0.0, -time * speed * 0.08);
+    p += vec2(0.0, -phase * 0.08);
   } else if (u_movementType == 6) {
-    p += vec2(0.0, time * speed * 0.08);
+    p += vec2(0.0, phase * 0.08);
   } else if (u_movementType == 7) {
-    p = rotate2d(time * speed * 0.75) * p;
+    p = rotate2d(phase * 0.75) * p;
   } else if (u_movementType == 8) {
-    p = rotate2d(-time * speed * 0.75) * p;
+    p = rotate2d(-phase * 0.75) * p;
   } else if (u_movementType == 9) {
-    p *= 1.0 + sin(time * speed * 2.0) * 0.12;
+    p *= 1.0 + sin(phase * 2.0) * 0.12;
   } else if (u_movementType == 10) {
     p += vec2(
-      sin(time * speed * 0.9),
-      cos(time * speed * 0.75)
+      sin(phase * 0.9),
+      cos(phase * 0.75)
     ) * 0.1;
   }
   return p;
@@ -386,9 +388,8 @@ vec2 evolveField(vec2 p, float time, float strength) {
   return p;
 }
 
-vec3 sampleNoise(vec2 local, vec2 uv, float aspect, float time) {
-  float pace = max(0.02, u_noiseSpeed) * mix(0.15, 1.4, u_timeInfluence);
-  float motionTime = time * pace;
+vec3 sampleNoise(vec2 local, vec2 uv, float aspect, float time, float noisePhase) {
+  float motionTime = noisePhase;
   float evolutionStrength = 0.14 + u_timeInfluence * 0.32 + u_noiseSpeed * 0.08;
   vec2 p = local * (2.5 + u_noiseScale * 2.0);
   p += vec2(u_noiseSeed * 0.071, u_noiseSeed * 0.113);
@@ -540,7 +541,13 @@ vec3 sampleMeshGradient(vec2 p, float time, float noiseValue) {
   return mix(color, samplePalette(noiseValue), u_meshWarp * 0.18);
 }
 
-vec3 sampleGradient(vec2 p, float time, float noiseValue, vec2 noiseVector) {
+vec3 sampleGradient(
+  vec2 p,
+  float time,
+  float gradientPhase,
+  float noiseValue,
+  vec2 noiseVector
+) {
   vec3 color;
   float softness = mix(0.12, 1.2, u_softness);
 
@@ -553,7 +560,7 @@ vec3 sampleGradient(vec2 p, float time, float noiseValue, vec2 noiseVector) {
     color = samplePalette(t);
   } else if (u_gradientType == 2) {
     float angle = atan(p.y, p.x) / (PI * 2.0) + 0.5;
-    float t = fract(angle + noiseValue * 0.08 + time * u_movementSpeed * 0.02);
+    float t = fract(angle + noiseValue * 0.08 + gradientPhase);
     color = samplePalette(t);
   } else if (u_gradientType == 3) {
     color = sampleMeshGradient(p, time, noiseValue);
@@ -564,9 +571,16 @@ vec3 sampleGradient(vec2 p, float time, float noiseValue, vec2 noiseVector) {
   } else if (u_gradientType == 5) {
     float radius = length(p);
     float angle = atan(p.y, p.x) / (PI * 2.0) + 0.5;
-    float segments = 4.0 + u_fragmentAmount * 14.0;
-    float sector = fract(angle * segments + noiseValue * 0.4);
-    float t = clamp((1.0 - radius * 1.55) + sector * 0.35, 0.0, 1.0);
+    float segments = 12.0;
+    float fragmentStrength = saturateFloat(u_fragmentAmount / 1.5);
+    float sector = fract(angle * segments);
+    float t = clamp(
+      (1.0 - radius * 1.55)
+        + sector * mix(0.16, 0.35, fragmentStrength)
+        + noiseValue * mix(0.02, 0.08, fragmentStrength),
+      0.0,
+      1.0
+    );
     color = samplePalette(t);
   } else {
     float bands = max(2.0, floor(u_bandCount));
@@ -611,22 +625,32 @@ vec3 applyBlendMode(vec3 base, vec3 layer, float mask) {
 void main() {
   float aspect = u_resolution.x / max(u_resolution.y, 1.0);
   float time = u_time;
+  float noisePhase = u_noisePhase;
+  float movementPhase = u_movementPhase;
+  float gradientPhase = u_gradientPhase;
 
   vec2 local = v_uv - u_center;
   local.x *= aspect;
-  local = applyMovement(local, time);
+  local = applyMovement(local, movementPhase);
   local /= max(0.25, u_gradientScale);
   local = rotate2d(u_rotation) * local;
 
-  vec3 noiseSampleValue = sampleNoise(local, v_uv, aspect, time);
+  vec3 noiseSampleValue = sampleNoise(local, v_uv, aspect, time, noisePhase);
   float noiseValue = noiseSampleValue.x;
   vec2 noiseVector = noiseSampleValue.yz;
 
   vec2 gradientLocal = local + noiseVector * (u_displacementStrength * 0.42);
-  vec3 primary = sampleGradient(gradientLocal, time, noiseValue, noiseVector);
+  vec3 primary = sampleGradient(
+    gradientLocal,
+    time,
+    gradientPhase,
+    noiseValue,
+    noiseVector
+  );
   vec3 echo = sampleGradient(
     gradientLocal + noiseVector * (0.18 + u_meshWarp * 0.14),
     time + 0.7,
+    gradientPhase + u_movementSpeed * 0.014,
     1.0 - noiseValue,
     -noiseVector
   );

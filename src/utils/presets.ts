@@ -25,11 +25,13 @@ import type {
   NoiseConfig,
   NoiseParamKey,
   NoiseType,
+  PresetLibrary,
+  PresetTab,
   SavedPreset,
 } from "../types";
 
 const PRESETS_STORAGE_KEY = "emotional-noise-lab:favourites";
-const PRESET_SCHEMA_VERSION = 2;
+const PRESET_SCHEMA_VERSION = 3;
 
 type SavePresetsResult = "full" | "without-thumbnails" | "failed";
 
@@ -73,6 +75,11 @@ const stripPresetThumbnail = (preset: SavedPreset): SavedPreset => {
 
 const stripPresetThumbnails = (presets: SavedPreset[]): SavedPreset[] =>
   presets.map(stripPresetThumbnail);
+
+const emptyPresetLibrary = (): PresetLibrary => ({
+  tabs: [],
+  presets: [],
+});
 
 const normalizeParams = <TKey extends string>(
   keys: TKey[],
@@ -206,7 +213,38 @@ const normalizeColorConfig = (
   return next;
 };
 
-const normalizePreset = (value: unknown): SavedPreset | null => {
+const normalizePresetTab = (value: unknown): PresetTab | null => {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  if (
+    typeof value.id !== "string" ||
+    typeof value.name !== "string" ||
+    typeof value.createdAt !== "string"
+  ) {
+    return null;
+  }
+
+  return {
+    id: value.id,
+    name: value.name,
+    createdAt: value.createdAt,
+  };
+};
+
+const normalizePresetTabs = (value: unknown): PresetTab[] => {
+  if (!isRecord(value) || !Array.isArray(value.tabs)) {
+    return [];
+  }
+
+  return value.tabs.map(normalizePresetTab).filter(Boolean) as PresetTab[];
+};
+
+const normalizePreset = (
+  value: unknown,
+  validTabIds?: Set<string>,
+): SavedPreset | null => {
   if (!isRecord(value)) {
     return null;
   }
@@ -230,45 +268,58 @@ const normalizePreset = (value: unknown): SavedPreset | null => {
     noise,
     gradient,
     color,
+    tabId:
+      typeof value.tabId === "string" &&
+      (!validTabIds || validTabIds.has(value.tabId))
+        ? value.tabId
+        : undefined,
     thumbnail: typeof value.thumbnail === "string" ? value.thumbnail : undefined,
   };
 };
 
-export const loadPresets = (): SavedPreset[] => {
+const normalizePresetLibrary = (value: unknown): PresetLibrary => {
+  const tabs = normalizePresetTabs(value);
+  const validTabIds = new Set(tabs.map((tab) => tab.id));
+  const source = Array.isArray(value)
+    ? value
+    : isRecord(value) && Array.isArray(value.presets)
+      ? value.presets
+      : [];
+
+  return {
+    tabs,
+    presets: source
+      .map((preset) => normalizePreset(preset, validTabIds))
+      .filter(Boolean) as SavedPreset[],
+  };
+};
+
+export const loadPresets = (): PresetLibrary => {
   try {
     const raw = localStorage.getItem(PRESETS_STORAGE_KEY);
     if (!raw) {
-      return [];
+      return emptyPresetLibrary();
     }
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) {
-      return [];
-    }
-    return parsed.map(normalizePreset).filter(Boolean) as SavedPreset[];
+    return normalizePresetLibrary(JSON.parse(raw));
   } catch {
-    return [];
+    return emptyPresetLibrary();
   }
-};
-
-const normalizePresets = (value: unknown): SavedPreset[] => {
-  const source = Array.isArray(value) ? value : (value as { presets?: unknown[] })?.presets;
-  if (!Array.isArray(source)) {
-    return [];
-  }
-  return source.map(normalizePreset).filter(Boolean) as SavedPreset[];
 };
 
 export { type SavePresetsResult };
 
-export const savePresets = (presets: SavedPreset[]): SavePresetsResult => {
+export const savePresets = (library: PresetLibrary): SavePresetsResult => {
   try {
-    localStorage.setItem(PRESETS_STORAGE_KEY, JSON.stringify(presets));
+    localStorage.setItem(PRESETS_STORAGE_KEY, JSON.stringify(library));
     return "full";
   } catch {
     try {
       localStorage.setItem(
         PRESETS_STORAGE_KEY,
-        JSON.stringify(stripPresetThumbnails(presets)),
+        JSON.stringify({
+          ...library,
+          presets: stripPresetThumbnails(library.presets),
+        }),
       );
       return "without-thumbnails";
     } catch {
@@ -277,7 +328,7 @@ export const savePresets = (presets: SavedPreset[]): SavePresetsResult => {
   }
 };
 
-export const loadRepoPresets = async (): Promise<SavedPreset[] | null> => {
+export const loadRepoPresets = async (): Promise<PresetLibrary | null> => {
   try {
     const response = await fetch("/api/presets", {
       cache: "no-store",
@@ -286,13 +337,13 @@ export const loadRepoPresets = async (): Promise<SavedPreset[] | null> => {
       return null;
     }
     const payload = await response.json();
-    return normalizePresets(payload);
+    return normalizePresetLibrary(payload);
   } catch {
     return null;
   }
 };
 
-export const syncRepoPresets = async (presets: SavedPreset[]) => {
+export const syncRepoPresets = async (library: PresetLibrary) => {
   try {
     const response = await fetch("/api/presets", {
       method: "POST",
@@ -302,7 +353,8 @@ export const syncRepoPresets = async (presets: SavedPreset[]) => {
       body: JSON.stringify({
         version: PRESET_SCHEMA_VERSION,
         updatedAt: new Date().toISOString(),
-        presets: stripPresetThumbnails(presets),
+        tabs: library.tabs,
+        presets: library.presets,
       }),
     });
     return response.ok;
@@ -311,12 +363,13 @@ export const syncRepoPresets = async (presets: SavedPreset[]) => {
   }
 };
 
-export const exportPresets = (presets: SavedPreset[]) => {
+export const exportPresets = (library: PresetLibrary) => {
   const payload = JSON.stringify(
     {
       version: PRESET_SCHEMA_VERSION,
       exportedAt: new Date().toISOString(),
-      presets: stripPresetThumbnails(presets),
+      tabs: library.tabs,
+      presets: library.presets,
     },
     null,
     2,
@@ -331,11 +384,11 @@ export const exportPresets = (presets: SavedPreset[]) => {
   URL.revokeObjectURL(url);
 };
 
-export const importPresetsFromText = (text: string): SavedPreset[] => {
+export const importPresetsFromText = (text: string): PresetLibrary => {
   const parsed = JSON.parse(text);
-  const presets = normalizePresets(parsed);
-  if (!presets.length) {
-    throw new Error("Expected a preset array or { presets: [...] } payload.");
+  const library = normalizePresetLibrary(parsed);
+  if (!library.tabs.length && !library.presets.length) {
+    throw new Error("Expected a preset payload with presets or tabs.");
   }
-  return presets;
+  return library;
 };

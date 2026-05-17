@@ -13,6 +13,7 @@ import {
   formatPresetLabel,
 } from "./config";
 import { ColorPanel } from "./components/ColorPanel";
+import { ExportPanel } from "./components/ExportPanel";
 import { GradientPanel } from "./components/GradientPanel";
 import { NoisePanel } from "./components/NoisePanel";
 import { SavedPresetsPanel } from "./components/SavedPresetsPanel";
@@ -21,12 +22,18 @@ import type {
   BlendMode,
   ColorParamKey,
   ColorwayId,
+  ExportSize,
   GradientMovement,
   GradientParamKey,
   GradientType,
   NoiseParamKey,
   NoiseType,
+  PhotoExportFormat,
+  PhotoExportRequest,
+  PresetLibrary,
+  PresetTab,
   SavedPreset,
+  VideoExportRequest,
 } from "./types";
 import {
   exportPresets,
@@ -40,6 +47,30 @@ import { randomizeCurrentConfiguration } from "./utils/randomize";
 
 const makePresetId = () =>
   `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+const makePresetTabId = () => `tab-${makePresetId()}`;
+
+const THUMBNAIL_BACKFILL_BATCH_SIZE = 4;
+const ALL_PRESET_TAB_ID = "__all-presets__";
+const EXPORT_DIMENSION_MIN = 64;
+const EXPORT_DIMENSION_MAX = 4096;
+const EXPORT_DURATION_MIN = 1;
+const EXPORT_DURATION_MAX = 60;
+const DEFAULT_EXPORT_SIZE: ExportSize = {
+  width: 1080,
+  height: 1350,
+};
+
+const clampExportDimension = (value: number) =>
+  Math.max(
+    EXPORT_DIMENSION_MIN,
+    Math.min(EXPORT_DIMENSION_MAX, Math.round(value)),
+  );
+
+const clampExportDuration = (value: number) =>
+  Math.max(
+    EXPORT_DURATION_MIN,
+    Math.min(EXPORT_DURATION_MAX, Math.round(value * 10) / 10),
+  );
 
 const mergePresetThumbnails = (
   presets: SavedPreset[],
@@ -57,16 +88,67 @@ const mergePresetThumbnails = (
   }));
 };
 
+const resolveNextPresetTabName = (tabs: PresetTab[]) => {
+  const nextIndex =
+    tabs.reduce((highest, tab) => {
+      const match = /^Tab (\d+)$/i.exec(tab.name);
+      if (!match) {
+        return highest;
+      }
+
+      return Math.max(highest, Number(match[1]));
+    }, 0) + 1;
+
+  return `Tab ${nextIndex}`;
+};
+
+const mergePresetLibraries = (
+  repoLibrary: PresetLibrary,
+  cachedLibrary: PresetLibrary,
+): PresetLibrary => {
+  const tabsById = new Map(repoLibrary.tabs.map((tab) => [tab.id, tab]));
+
+  for (const cachedTab of cachedLibrary.tabs) {
+    if (!tabsById.has(cachedTab.id)) {
+      tabsById.set(cachedTab.id, cachedTab);
+    }
+  }
+
+  const tabs = Array.from(tabsById.values());
+  const validTabIds = new Set(tabs.map((tab) => tab.id));
+
+  return {
+    tabs,
+    presets: mergePresetThumbnails(
+      repoLibrary.presets,
+      cachedLibrary.presets,
+    ).map((preset) =>
+      preset.tabId && !validTabIds.has(preset.tabId)
+        ? { ...preset, tabId: undefined }
+        : preset,
+    ),
+  };
+};
+
 export default function App() {
   const [noiseConfig, setNoiseConfig] = useState(DEFAULT_NOISE_CONFIG);
   const [gradientConfig, setGradientConfig] = useState(DEFAULT_GRADIENT_CONFIG);
   const [colorConfig, setColorConfig] = useState(DEFAULT_COLOR_CONFIG);
+  const [visualTransitionKey, setVisualTransitionKey] = useState(0);
   const [favourites, setFavourites] = useState<SavedPreset[]>([]);
+  const [presetTabs, setPresetTabs] = useState<PresetTab[]>([]);
+  const [activePresetTabId, setActivePresetTabId] = useState(ALL_PRESET_TAB_ID);
   const [paused, setPaused] = useState(false);
   const [presetsDrawerOpen, setPresetsDrawerOpen] = useState(false);
   const [noisePanelOpen, setNoisePanelOpen] = useState(true);
   const [gradientPanelOpen, setGradientPanelOpen] = useState(true);
   const [colorPanelOpen, setColorPanelOpen] = useState(true);
+  const [exportPanelOpen, setExportPanelOpen] = useState(false);
+  const [exportSize, setExportSize] = useState<ExportSize>(DEFAULT_EXPORT_SIZE);
+  const [photoExportFormat, setPhotoExportFormat] =
+    useState<PhotoExportFormat>("png");
+  const [videoDurationSeconds, setVideoDurationSeconds] = useState(8);
+  const [activeExport, setActiveExport] = useState<"photo" | "video" | null>(null);
   const [statusMessage, setStatusMessage] = useState(
     "Live controls update the field immediately.",
   );
@@ -75,27 +157,50 @@ export default function App() {
   const presetsReadyRef = useRef(false);
   const skipNextPresetSyncRef = useRef(true);
   const captureSnapshotRef = useRef<(() => string | undefined) | null>(null);
+  const capturePresetSnapshotRef = useRef<
+    | ((
+      noise: SavedPreset["noise"],
+      gradient: SavedPreset["gradient"],
+      color: SavedPreset["color"],
+    ) => string | undefined)
+    | null
+  >(null);
   const pendingThumbnailPresetIdRef = useRef<string | null>(null);
+  const favouritesRef = useRef<SavedPreset[]>([]);
+  const thumbnailBackfillFrameRef = useRef<number>();
+  const thumbnailBackfillActiveRef = useRef(false);
+  const exportPhotoRef = useRef<
+    ((request: PhotoExportRequest) => Promise<void>) | null
+  >(null);
+  const exportVideoRef = useRef<
+    ((request: VideoExportRequest) => Promise<void>) | null
+  >(null);
+
+  favouritesRef.current = favourites;
 
   useEffect(() => {
     let isCancelled = false;
 
     const bootstrapPresets = async () => {
-      const cachedPresets = loadPresets();
-      const repoPresets = await loadRepoPresets();
+      const cachedLibrary = loadPresets();
+      const repoLibrary = await loadRepoPresets();
 
       if (isCancelled) {
         return;
       }
 
-      if (repoPresets) {
-        setFavourites(mergePresetThumbnails(repoPresets, cachedPresets));
+      if (repoLibrary) {
+        const mergedLibrary = mergePresetLibraries(repoLibrary, cachedLibrary);
+
+        setFavourites(mergedLibrary.presets);
+        setPresetTabs(mergedLibrary.tabs);
         setStatusMessage(
-          `Loaded ${repoPresets.length} preset${repoPresets.length === 1 ? "" : "s"} from repo JSON.`,
+          `Loaded ${mergedLibrary.presets.length} preset${mergedLibrary.presets.length === 1 ? "" : "s"} from repo JSON.`,
         );
       } else {
-        setFavourites(cachedPresets);
-        if (cachedPresets.length) {
+        setFavourites(cachedLibrary.presets);
+        setPresetTabs(cachedLibrary.tabs);
+        if (cachedLibrary.presets.length || cachedLibrary.tabs.length) {
           setStatusMessage(
             "Repo JSON sync unavailable. Loaded cached browser presets instead.",
           );
@@ -118,7 +223,10 @@ export default function App() {
       return;
     }
 
-    const result = savePresets(favourites);
+    const result = savePresets({
+      tabs: presetTabs,
+      presets: favourites,
+    });
 
     if (skipNextPresetSyncRef.current) {
       skipNextPresetSyncRef.current = false;
@@ -141,14 +249,27 @@ export default function App() {
     }
 
     void (async () => {
-      const synced = await syncRepoPresets(favourites);
+      const synced = await syncRepoPresets({
+        tabs: presetTabs,
+        presets: favourites,
+      });
       if (!synced) {
         setStatusMessage(
           "Preset change saved in-browser, but repo JSON sync failed. Keep the Vite server running to write presets into the repo.",
         );
       }
     })();
-  }, [favourites]);
+  }, [favourites, presetTabs]);
+
+  useEffect(() => {
+    if (activePresetTabId === ALL_PRESET_TAB_ID) {
+      return;
+    }
+
+    if (!presetTabs.some((tab) => tab.id === activePresetTabId)) {
+      setActivePresetTabId(ALL_PRESET_TAB_ID);
+    }
+  }, [activePresetTabId, presetTabs]);
 
   useEffect(() => {
     const pendingPresetId = pendingThumbnailPresetIdRef.current;
@@ -172,6 +293,94 @@ export default function App() {
 
     return () => cancelAnimationFrame(frameId);
   }, [colorConfig, gradientConfig, noiseConfig]);
+
+  useEffect(() => {
+    return () => {
+      if (thumbnailBackfillFrameRef.current) {
+        cancelAnimationFrame(thumbnailBackfillFrameRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!presetsReadyRef.current || thumbnailBackfillActiveRef.current) {
+      return;
+    }
+
+    const missingPresetIds = favourites
+      .filter((preset) => !preset.thumbnail)
+      .map((preset) => preset.id);
+
+    if (!missingPresetIds.length || !capturePresetSnapshotRef.current) {
+      return;
+    }
+
+    thumbnailBackfillActiveRef.current = true;
+    let restoredCount = 0;
+    const queue = [...missingPresetIds];
+
+    const processBatch = () => {
+      const capturePresetSnapshot = capturePresetSnapshotRef.current;
+      if (!capturePresetSnapshot) {
+        thumbnailBackfillActiveRef.current = false;
+        return;
+      }
+
+      const batchIds = queue.splice(0, THUMBNAIL_BACKFILL_BATCH_SIZE);
+      const currentFavourites = favouritesRef.current;
+      const refreshed = batchIds
+        .map((id) => {
+          const preset = currentFavourites.find((entry) => entry.id === id);
+          if (!preset || preset.thumbnail) {
+            return null;
+          }
+
+          const thumbnail = capturePresetSnapshot(
+            preset.noise,
+            preset.gradient,
+            preset.color,
+          );
+
+          return thumbnail ? { id, thumbnail } : null;
+        })
+        .filter(Boolean) as { id: string; thumbnail: string }[];
+
+      if (refreshed.length) {
+        restoredCount += refreshed.length;
+        const thumbnailsById = new Map(
+          refreshed.map(({ id, thumbnail }) => [id, thumbnail]),
+        );
+
+        setFavourites((previous) =>
+          previous.map((preset) => {
+            const thumbnail = thumbnailsById.get(preset.id);
+            return thumbnail && !preset.thumbnail
+              ? { ...preset, thumbnail }
+              : preset;
+          }),
+        );
+      }
+
+      if (queue.length) {
+        thumbnailBackfillFrameRef.current = requestAnimationFrame(processBatch);
+        return;
+      }
+
+      thumbnailBackfillActiveRef.current = false;
+      if (restoredCount) {
+        setStatusMessage(
+          `Refreshed ${restoredCount} preset snapshot${restoredCount === 1 ? "" : "s"} from the live renderer.`,
+        );
+      }
+    };
+
+    thumbnailBackfillFrameRef.current = requestAnimationFrame(processBatch);
+  }, [favourites]);
+
+  const visibleFavourites =
+    activePresetTabId === ALL_PRESET_TAB_ID
+      ? favourites
+      : favourites.filter((preset) => preset.tabId === activePresetTabId);
 
   const handleNoiseTypeChange = (type: NoiseType) => {
     setNoiseConfig((previous) => createNoiseConfig(type, previous));
@@ -282,6 +491,7 @@ export default function App() {
     setNoiseConfig(randomized.noise);
     setGradientConfig(randomized.gradient);
     setColorConfig(randomized.color);
+    setVisualTransitionKey((previous) => previous + 1);
     setPaused(false);
     setStatusMessage("Current field parameters randomized.");
   };
@@ -304,6 +514,8 @@ export default function App() {
       noise: cloneNoiseConfig(noiseConfig),
       gradient: cloneGradientConfig(gradientConfig),
       color: cloneColorConfig(colorConfig),
+      tabId:
+        activePresetTabId === ALL_PRESET_TAB_ID ? undefined : activePresetTabId,
       thumbnail,
     };
     setFavourites((previous) => [preset, ...previous]);
@@ -316,6 +528,7 @@ export default function App() {
     setNoiseConfig(cloneNoiseConfig(preset.noise));
     setGradientConfig(cloneGradientConfig(preset.gradient));
     setColorConfig(cloneColorConfig(createColorConfig(preset.color)));
+    setVisualTransitionKey((previous) => previous + 1);
     setPaused(false);
     setStatusMessage(`Restored preset "${preset.name}".`);
   };
@@ -334,8 +547,106 @@ export default function App() {
     setStatusMessage("Preset deleted.");
   };
 
+  const handleAssignPresetTab = (id: string, tabId?: string) => {
+    setFavourites((previous) =>
+      previous.map((preset) =>
+        preset.id === id ? { ...preset, tabId } : preset,
+      ),
+    );
+    setStatusMessage(tabId ? "Preset moved to tab." : "Preset returned to All.");
+  };
+
+  const handleCreatePresetTab = () => {
+    const tab: PresetTab = {
+      id: makePresetTabId(),
+      name: resolveNextPresetTabName(presetTabs),
+      createdAt: new Date().toISOString(),
+    };
+
+    setPresetTabs((previous) => [...previous, tab]);
+    setPresetsDrawerOpen(true);
+    setStatusMessage(`Created ${tab.name}.`);
+  };
+
+  const handleExportWidthChange = (value: number) => {
+    setExportSize((previous) => ({
+      ...previous,
+      width: clampExportDimension(value),
+    }));
+  };
+
+  const handleExportHeightChange = (value: number) => {
+    setExportSize((previous) => ({
+      ...previous,
+      height: clampExportDimension(value),
+    }));
+  };
+
+  const handleApplyExportPreset = (width: number, height: number) => {
+    setExportSize({
+      width: clampExportDimension(width),
+      height: clampExportDimension(height),
+    });
+  };
+
+  const handlePhotoExport = async () => {
+    const exportPhoto = exportPhotoRef.current;
+    if (!exportPhoto) {
+      setStatusMessage("Renderer is not ready yet.");
+      return;
+    }
+
+    try {
+      setActiveExport("photo");
+      await exportPhoto({
+        ...exportSize,
+        format: photoExportFormat,
+      });
+      setStatusMessage(
+        `Exported ${photoExportFormat.toUpperCase()} at ${exportSize.width} × ${exportSize.height}.`,
+      );
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Photo export failed.";
+      setStatusMessage(message);
+    } finally {
+      setActiveExport(null);
+    }
+  };
+
+  const handleVideoExport = async () => {
+    const exportVideo = exportVideoRef.current;
+    if (!exportVideo) {
+      setStatusMessage("Renderer is not ready yet.");
+      return;
+    }
+
+    try {
+      setActiveExport("video");
+      setStatusMessage(
+        `Recording ${videoDurationSeconds.toFixed(1)} second video export...`,
+      );
+      await exportVideo({
+        ...exportSize,
+        durationSeconds: videoDurationSeconds,
+      });
+      setStatusMessage(
+        `Exported ${videoDurationSeconds.toFixed(1)} second video at ${exportSize.width} × ${exportSize.height}.`,
+      );
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Video export failed.";
+      setStatusMessage(message);
+    } finally {
+      setActiveExport(null);
+    }
+  };
+
   const handleExport = () => {
-    exportPresets(favourites);
+    exportPresets({
+      tabs: presetTabs,
+      presets: favourites,
+    });
     setStatusMessage("Presets exported as JSON.");
   };
 
@@ -343,25 +654,45 @@ export default function App() {
     try {
       const importedText = await file.text();
       const imported = importPresetsFromText(importedText);
+      const importedTabs = [...imported.tabs];
+      const nextTabs = [...presetTabs];
+      const existingTabIds = new Set(presetTabs.map((tab) => tab.id));
+      const remappedTabIds = new Map<string, string>();
+
+      for (const tab of importedTabs) {
+        const nextId = existingTabIds.has(tab.id) ? makePresetTabId() : tab.id;
+        existingTabIds.add(nextId);
+        remappedTabIds.set(tab.id, nextId);
+        nextTabs.push(nextId === tab.id ? tab : { ...tab, id: nextId });
+      }
+
+      setPresetTabs(nextTabs);
       setFavourites((previous) => {
         const existingIds = new Set(previous.map((preset) => preset.id));
-        const normalized = imported.map((preset) => {
+        const normalized = imported.presets.map((preset) => {
+          const nextPreset = preset.tabId
+            ? {
+                ...preset,
+                tabId: remappedTabIds.get(preset.tabId) ?? preset.tabId,
+              }
+            : preset;
+
           if (!existingIds.has(preset.id)) {
-            existingIds.add(preset.id);
-            return preset;
+            existingIds.add(nextPreset.id);
+            return nextPreset;
           }
 
           const id = makePresetId();
           existingIds.add(id);
           return {
-            ...preset,
+            ...nextPreset,
             id,
           };
         });
         return [...normalized, ...previous];
       });
       setStatusMessage(
-        `Imported ${imported.length} preset${imported.length === 1 ? "" : "s"} and queued repo JSON sync.`,
+        `Imported ${imported.presets.length} preset${imported.presets.length === 1 ? "" : "s"} and ${imported.tabs.length} tab${imported.tabs.length === 1 ? "" : "s"}.`,
       );
       setPresetsDrawerOpen(true);
     } catch (error) {
@@ -375,10 +706,15 @@ export default function App() {
     <div className="app-shell">
       <VisualCanvas
         colorConfig={colorConfig}
+        capturePresetSnapshotRef={capturePresetSnapshotRef}
         captureSnapshotRef={captureSnapshotRef}
+        exportPhotoRef={exportPhotoRef}
+        exportPreviewSize={exportPanelOpen ? exportSize : null}
+        exportVideoRef={exportVideoRef}
         gradientConfig={gradientConfig}
         noiseConfig={noiseConfig}
         paused={paused}
+        transitionKey={visualTransitionKey}
       />
 
       <header className="app-header">
@@ -413,6 +749,25 @@ export default function App() {
             isOpen={colorPanelOpen}
             onToggle={() => setColorPanelOpen((value) => !value)}
           />
+
+          <ExportPanel
+            durationSeconds={videoDurationSeconds}
+            height={exportSize.height}
+            isExportingPhoto={activeExport === "photo"}
+            isExportingVideo={activeExport === "video"}
+            isOpen={exportPanelOpen}
+            onApplyPreset={handleApplyExportPreset}
+            onDurationChange={(value) =>
+              setVideoDurationSeconds(clampExportDuration(value))}
+            onExportPhoto={handlePhotoExport}
+            onExportVideo={handleVideoExport}
+            onHeightChange={handleExportHeightChange}
+            onPhotoFormatChange={setPhotoExportFormat}
+            onToggle={() => setExportPanelOpen((value) => !value)}
+            onWidthChange={handleExportWidthChange}
+            photoFormat={photoExportFormat}
+            width={exportSize.width}
+          />
         </div>
       </header>
 
@@ -421,14 +776,22 @@ export default function App() {
       </div>
 
       <SavedPresetsPanel
-        favourites={favourites}
+        activeTabId={activePresetTabId}
+        allTabId={ALL_PRESET_TAB_ID}
+        allPresets={favourites}
         isOpen={presetsDrawerOpen}
+        isShowingAllTab={activePresetTabId === ALL_PRESET_TAB_ID}
+        onAssignTab={handleAssignPresetTab}
+        onCreateTab={handleCreatePresetTab}
         onDelete={handleDeletePreset}
         onExport={handleExport}
         onImport={handleImport}
         onRename={handleRenamePreset}
         onRestore={handleRestorePreset}
+        onSelectTab={setActivePresetTabId}
         onToggle={() => setPresetsDrawerOpen((value) => !value)}
+        presets={visibleFavourites}
+        tabs={presetTabs}
       />
 
       <div className="bottom-controls">

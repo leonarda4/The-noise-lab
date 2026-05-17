@@ -9,9 +9,22 @@ const configDirectory = dirname(fileURLToPath(import.meta.url));
 const presetsFilePath = resolve(configDirectory, "data/presets.json");
 
 const defaultPresetPayload = {
-  version: 1,
+  version: 3,
   updatedAt: new Date(0).toISOString(),
+  tabs: [],
   presets: [],
+};
+
+const isPresetTabLike = (value: unknown) => {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+  const candidate = value as Record<string, unknown>;
+  return (
+    typeof candidate.id === "string" &&
+    typeof candidate.name === "string" &&
+    typeof candidate.createdAt === "string"
+  );
 };
 
 const isPresetLike = (value: unknown) => {
@@ -36,12 +49,18 @@ const normalizePresetPayload = (value: unknown) => {
         ? (value as { presets: unknown[] }).presets
         : [];
 
-  return source
-    .filter(isPresetLike)
-    .map((preset) => {
-      const { thumbnail: _thumbnail, ...rest } = preset as Record<string, unknown>;
-      return rest;
-    });
+  return source.filter(isPresetLike);
+};
+
+const normalizeTabPayload = (value: unknown) => {
+  const source =
+    value &&
+    typeof value === "object" &&
+    Array.isArray((value as { tabs?: unknown[] }).tabs)
+      ? (value as { tabs: unknown[] }).tabs
+      : [];
+
+  return source.filter(isPresetTabLike);
 };
 
 const ensurePresetsFile = async () => {
@@ -66,11 +85,12 @@ const readPresetPayload = async () => {
       version:
         parsed && typeof parsed === "object" && typeof parsed.version === "number"
           ? parsed.version
-          : 1,
+          : 3,
       updatedAt:
         parsed && typeof parsed === "object" && typeof parsed.updatedAt === "string"
           ? parsed.updatedAt
           : new Date().toISOString(),
+      tabs: normalizeTabPayload(parsed),
       presets: normalizePresetPayload(parsed),
     };
   } catch {
@@ -79,10 +99,12 @@ const readPresetPayload = async () => {
 };
 
 const writePresetPayload = async (value: unknown) => {
+  const tabs = normalizeTabPayload(value);
   const presets = normalizePresetPayload(value);
   const payload = {
-    version: 1,
+    version: 3,
     updatedAt: new Date().toISOString(),
+    tabs,
     presets,
   };
 

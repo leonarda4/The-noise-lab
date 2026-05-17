@@ -51,6 +51,6 @@ The built files are written to `web/dist/`.
 ## Notes
 
 - Presets are automatically loaded from and written back to `web/data/presets.json` while the Vite dev or preview server is running.
-- A browser cache copy is also kept as a fallback for thumbnails and offline recovery.
-- Saved thumbnails are captured from the live WebGL canvas at the moment a preset is stored.
+- A browser cache copy is also kept as a fallback for offline recovery and thumbnail backfill.
+- Saved thumbnails are captured from the live WebGL canvas, written into preset JSON, and older presets without thumbnails are refreshed automatically on load.
 - The shader architecture is set up so each noise type produces a distinct modulation field rather than a flat texture swap.

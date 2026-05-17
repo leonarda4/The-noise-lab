@@ -168,6 +168,12 @@ export interface ColorConfig {
   params: ColorParamValues;
 }
 
+export interface PresetTab {
+  id: string;
+  name: string;
+  createdAt: string;
+}
+
 export interface SavedPreset {
   id: string;
   name: string;
@@ -175,7 +181,13 @@ export interface SavedPreset {
   noise: NoiseConfig;
   gradient: GradientConfig;
   color: ColorConfig;
+  tabId?: string;
   thumbnail?: string;
+}
+
+export interface PresetLibrary {
+  tabs: PresetTab[];
+  presets: SavedPreset[];
 }
 
 export interface NoiseDefinition {
@@ -191,4 +203,19 @@ export interface ColorwayDefinition {
   label: string;
   description: string;
   colors: string[];
+}
+
+export type PhotoExportFormat = "png" | "jpeg";
+
+export interface ExportSize {
+  width: number;
+  height: number;
+}
+
+export interface PhotoExportRequest extends ExportSize {
+  format: PhotoExportFormat;
+}
+
+export interface VideoExportRequest extends ExportSize {
+  durationSeconds: number;
 }

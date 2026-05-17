@@ -1,14 +1,18 @@
 import { useState } from "react";
-import type { SavedPreset } from "../types";
+import type { PresetTab, SavedPreset } from "../types";
 
 interface PresetCardProps {
   preset: SavedPreset;
+  tabs: PresetTab[];
+  onAssignTab: (id: string, tabId?: string) => void;
   onRestore: (preset: SavedPreset) => void;
   onRename: (id: string, name: string) => void;
   onDelete: (id: string) => void;
 }
 
 export function PresetCard({
+  tabs,
+  onAssignTab,
   preset,
   onDelete,
   onRename,
@@ -70,6 +74,20 @@ export function PresetCard({
         <p className="preset-meta">{preset.noise.type} / {preset.gradient.type}</p>
         <p className="preset-meta">{preset.color.colorwayId}</p>
         <p className="preset-date">{createdAt}</p>
+        <select
+          aria-label="Preset tab"
+          className="preset-tab-select"
+          onChange={(event) =>
+            onAssignTab(preset.id, event.target.value || undefined)}
+          value={preset.tabId ?? ""}
+        >
+          <option value="">All</option>
+          {tabs.map((tab) => (
+            <option key={tab.id} value={tab.id}>
+              {tab.name}
+            </option>
+          ))}
+        </select>
 
         <div className="preset-actions">
           <button
