@@ -9,6 +9,8 @@ import {
   DEFAULT_NOISE_CONFIG,
   GRADIENT_LABELS,
   GRADIENT_PARAM_KEYS,
+  MAX_COLOR_STOPS,
+  MIN_COLOR_STOPS,
   MOVEMENT_OPTIONS,
   NOISE_LABELS,
   NOISE_PARAM_KEYS,
@@ -55,6 +57,7 @@ type LegacyGradientPresetShape = {
   movement?: unknown;
   colorwayId?: unknown;
   customStops?: unknown;
+  editedStops?: unknown;
   blendMode?: unknown;
   params?: unknown;
 };
@@ -188,8 +191,13 @@ const normalizeColorConfig = (
   }
 
   const customStops = source?.customStops ?? legacy?.customStops;
-  if (isStringArray(customStops) && customStops.length >= 3) {
-    next.customStops = customStops.slice(0, 5);
+  if (isStringArray(customStops) && customStops.length >= MIN_COLOR_STOPS) {
+    next.customStops = customStops.slice(0, MAX_COLOR_STOPS);
+  }
+
+  const editedStops = source?.editedStops ?? legacy?.editedStops;
+  if (isStringArray(editedStops) && editedStops.length >= MIN_COLOR_STOPS) {
+    next.editedStops = editedStops.slice(0, MAX_COLOR_STOPS);
   }
 
   const normalizedBlendMode = normalizeBlendMode(

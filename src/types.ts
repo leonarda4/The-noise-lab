@@ -10,6 +10,11 @@ export type NoiseType =
   | "domainWarp"
   | "worley"
   | "voronoi"
+  | "joy"
+  | "anger"
+  | "sadness"
+  | "serenity"
+  | "determination"
   | "blueGrain";
 
 export type NoiseParamKey =
@@ -170,6 +175,7 @@ export interface GradientConfig {
 export interface ColorConfig {
   colorwayId: ColorwayId;
   customStops: string[];
+  editedStops: string[];
   blendMode: BlendMode;
   params: ColorParamValues;
 }

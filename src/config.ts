@@ -57,6 +57,11 @@ export const NOISE_LABELS: Record<string, string> = {
   domainWarp: "Domain Warp",
   worley: "Worley / Cellular",
   voronoi: "Voronoi",
+  joy: "Joy / Bloom Rings",
+  anger: "Anger / Radial Spines",
+  sadness: "Sadness / Sag Bands",
+  serenity: "Serenity / Calm Lines",
+  determination: "Determination / Vertical Lift",
   blueGrain: "Blue-Noise Grain",
 };
 
@@ -94,40 +99,43 @@ export const BLEND_MODE_OPTIONS: SelectOption<BlendMode>[] = [
   { value: "displace", label: "Displace" },
 ];
 
+export const MIN_COLOR_STOPS = 3;
+export const MAX_COLOR_STOPS = 7;
+
 export const COLORWAYS: ColorwayDefinition[] = [
   {
     key: "joy",
-    label: "Preset 1",
+    label: "Joy",
     description: "Soft light and optimistic lift.",
     colors: ["#f7e26b", "#ff8cb7", "#8ce4ff", "#c9b7ff", "#fff8d2"],
   },
   {
     key: "sadness",
-    label: "Preset 2",
+    label: "Sadness",
     description: "Muted cold tones with suspended motion.",
     colors: ["#6984c7", "#9ca3b2", "#c8c0dd", "#7f9388", "#eef2ff"],
   },
   {
     key: "anger",
-    label: "Preset 3",
+    label: "Anger",
     description: "High contrast heat with clipped highlights.",
     colors: ["#ff4338", "#15090a", "#ff3ca8", "#ffffff", "#8f1118"],
   },
   {
     key: "fear",
-    label: "Preset 4",
+    label: "Fear",
     description: "Acidic unease and unstable edges.",
     colors: ["#d7ff32", "#11331a", "#050505", "#ff7f23", "#7d9b0f"],
   },
   {
     key: "determination",
-    label: "Preset 5",
+    label: "Determination",
     description: "Forward energy with crisp highlights.",
     colors: ["#173fbe", "#fa5c22", "#7f3eff", "#fefefe", "#2e88ff"],
   },
   {
     key: "neutralStudy",
-    label: "Preset 6",
+    label: "Neutral",
     description: "Monochrome material study.",
     colors: ["#050505", "#e8dfd4", "#878787", "#292929", "#f5f0ea"],
   },
@@ -176,7 +184,7 @@ export const COLORWAYS: ColorwayDefinition[] = [
   {
     key: "custom",
     label: "Custom",
-    description: "Manually edit 3 to 5 stops.",
+    description: "Manually edit 3 to 7 stops.",
     colors: ["#5be4ff", "#ff6fae", "#fff2c6", "#7c65ff"],
   },
 ];
@@ -443,6 +451,96 @@ export const NOISE_DEFINITIONS: NoiseDefinition[] = [
     ],
   },
   {
+    key: "joy",
+    label: NOISE_LABELS.joy,
+    description: "Concentric rings and central bloom with gentle radiant lift.",
+    emotionalHint: "Useful for delight, release, openness, and optimistic expansion.",
+    controls: [
+      range("scale", "Scale", 0.2, 3.5, 0.01),
+      range("speed", "Speed", 0, 2.5, 0.01),
+      range("amplitude", "Bloom Strength", 0, 1.5, 0.01),
+      range("sharpness", "Ring Sharpness", 0, 1, 0.01),
+      range("blur", "Soft Glow", 0, 1, 0.01),
+      range("octaves", "Texture Layers", 1, 5, 1),
+      ...SHARED_NOISE_CONTROLS.filter(
+        (control) =>
+          !["scale", "speed"].includes(control.key),
+      ),
+    ],
+  },
+  {
+    key: "anger",
+    label: NOISE_LABELS.anger,
+    description: "Compressed elliptical rings with sharp outward spines and agitation.",
+    emotionalHint: "Useful for pressure, friction, impact, and tightly wound force.",
+    controls: [
+      range("scale", "Scale", 0.2, 3.5, 0.01),
+      range("speed", "Speed", 0, 2.5, 0.01),
+      range("compression", "Ellipse Compression", 0, 1, 0.01),
+      range("sharpness", "Spine Sharpness", 0, 1, 0.01),
+      range("turbulenceStrength", "Agitation", 0, 1.5, 0.01),
+      range("swirlAmount", "Rotation", 0, 1.5, 0.01),
+      ...SHARED_NOISE_CONTROLS.filter(
+        (control) =>
+          !["scale", "speed"].includes(control.key),
+      ),
+    ],
+  },
+  {
+    key: "sadness",
+    label: NOISE_LABELS.sadness,
+    description: "Drooping horizontal bands with downward weight and suspended drift.",
+    emotionalHint: "Useful for heaviness, grief, stillness, and slow emotional descent.",
+    controls: [
+      range("scale", "Scale", 0.2, 3.5, 0.01),
+      range("speed", "Speed", 0, 2.5, 0.01),
+      range("flowStrength", "Sag", 0, 1.5, 0.01),
+      range("smoothness", "Layer Softness", 0, 1, 0.01),
+      range("blur", "Diffusion", 0, 1, 0.01),
+      range("amplitude", "Weight", 0, 1.5, 0.01),
+      ...SHARED_NOISE_CONTROLS.filter(
+        (control) =>
+          !["scale", "speed"].includes(control.key),
+      ),
+    ],
+  },
+  {
+    key: "serenity",
+    label: NOISE_LABELS.serenity,
+    description: "Long, nearly flat contour lines with restrained drift and minimal curvature.",
+    emotionalHint: "Useful for calm, balance, contemplation, and low-complexity spaciousness.",
+    controls: [
+      range("scale", "Scale", 0.2, 3.5, 0.01),
+      range("speed", "Speed", 0, 2.5, 0.01),
+      range("smoothness", "Calmness", 0, 1, 0.01),
+      range("blur", "Haze", 0, 1, 0.01),
+      range("compression", "Line Span", 0, 1, 0.01),
+      range("amplitude", "Ripple Depth", 0, 1.5, 0.01),
+      ...SHARED_NOISE_CONTROLS.filter(
+        (control) =>
+          !["scale", "speed"].includes(control.key),
+      ),
+    ],
+  },
+  {
+    key: "determination",
+    label: NOISE_LABELS.determination,
+    description: "Ordered vertical bands with upward emphasis and controlled structural push.",
+    emotionalHint: "Useful for resolve, direction, purpose, and deliberate forward motion.",
+    controls: [
+      range("scale", "Scale", 0.2, 3.5, 0.01),
+      range("speed", "Speed", 0, 2.5, 0.01),
+      range("sharpness", "Column Sharpness", 0, 1, 0.01),
+      range("compression", "Orderliness", 0, 1, 0.01),
+      range("directionInstability", "Instability", 0, 1, 0.01),
+      range("flowStrength", "Upward Lift", 0, 1.5, 0.01),
+      ...SHARED_NOISE_CONTROLS.filter(
+        (control) =>
+          !["scale", "speed"].includes(control.key),
+      ),
+    ],
+  },
+  {
     key: "blueGrain",
     label: NOISE_LABELS.blueGrain,
     description: "Dithered, more evenly distributed grain with a digital finish.",
@@ -505,6 +603,7 @@ export const DEFAULT_GRADIENT_CONFIG: GradientConfig = {
 export const DEFAULT_COLOR_CONFIG: ColorConfig = {
   colorwayId: "joy",
   customStops: [...COLORWAYS.find((colorway) => colorway.key === "custom")!.colors],
+  editedStops: [],
   blendMode: "displace",
   params: { ...COLOR_DEFAULT_PARAMS },
 };
@@ -521,7 +620,12 @@ export const NOISE_TYPE_TO_INDEX: Record<NoiseConfig["type"], number> = {
   domainWarp: 8,
   worley: 9,
   voronoi: 10,
-  blueGrain: 11,
+  joy: 11,
+  anger: 12,
+  sadness: 13,
+  serenity: 14,
+  determination: 15,
+  blueGrain: 16,
 };
 
 export const GRADIENT_TYPE_TO_INDEX: Record<GradientType, number> = {
@@ -592,7 +696,9 @@ export const getNoiseDefinition = (type: NoiseConfig["type"]) =>
   NOISE_DEFINITIONS.find((definition) => definition.key === type)!;
 
 export const getColorStops = (color: ColorConfig) =>
-  color.colorwayId === "custom"
+  color.editedStops.length >= MIN_COLOR_STOPS
+    ? color.editedStops
+    : color.colorwayId === "custom"
     ? color.customStops
     : COLORWAY_BY_ID[color.colorwayId].colors;
 
@@ -642,9 +748,12 @@ export const createColorConfig = (previous?: ColorConfig): ColorConfig => {
   const prev = previous ?? DEFAULT_COLOR_CONFIG;
   return {
     colorwayId: prev.colorwayId,
-    customStops: prev.customStops.length >= 3
-      ? [...prev.customStops.slice(0, 5)]
+    customStops: prev.customStops.length >= MIN_COLOR_STOPS
+      ? [...prev.customStops.slice(0, MAX_COLOR_STOPS)]
       : [...DEFAULT_COLOR_CONFIG.customStops],
+    editedStops: prev.editedStops.length >= MIN_COLOR_STOPS
+      ? [...prev.editedStops.slice(0, MAX_COLOR_STOPS)]
+      : [],
     blendMode: prev.blendMode,
     params: {
       ...COLOR_DEFAULT_PARAMS,
@@ -669,6 +778,7 @@ export const cloneGradientConfig = (
 export const cloneColorConfig = (color: ColorConfig): ColorConfig => ({
   colorwayId: color.colorwayId,
   customStops: [...color.customStops],
+  editedStops: [...color.editedStops],
   blendMode: color.blendMode,
   params: { ...color.params },
 });

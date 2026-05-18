@@ -97,7 +97,7 @@ button {
 }
 
 .color-panel {
-  --surface-width: 196px;
+  --surface-width: 180px;
 }
 
 .export-panel {
@@ -107,8 +107,12 @@ button {
 .panel-tab,
 .folder-tab,
 .drawer-tab,
+.colorway-row-button,
+.colorway-swatch-button,
+.swap-library-swatch,
 .utility-button,
 .small-button,
+.text-button,
 .preset-title,
 .preset-preview {
   cursor: pointer;
@@ -199,13 +203,20 @@ button {
   visibility: visible;
 }
 
+.color-panel .panel-surface {
+  overflow: visible;
+  max-height: none;
+}
+
 .panel-surface::-webkit-scrollbar,
-.folder-presets::-webkit-scrollbar {
+.folder-presets::-webkit-scrollbar,
+.color-panel-scroll::-webkit-scrollbar {
   width: 7px;
 }
 
 .panel-surface::-webkit-scrollbar-thumb,
-.folder-presets::-webkit-scrollbar-thumb {
+.folder-presets::-webkit-scrollbar-thumb,
+.color-panel-scroll::-webkit-scrollbar-thumb {
   border-radius: 999px;
   background: rgba(17, 17, 17, 0.18);
 }
@@ -214,8 +225,7 @@ button {
   margin-top: 12px;
 }
 
-.control-stack,
-.custom-stop-stack {
+.control-stack {
   display: grid;
   gap: 0;
 }
@@ -372,84 +382,149 @@ button {
   transform: translateX(18px);
 }
 
-.colorway-grid {
+.colorway-list {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 6px;
+  gap: 14px;
 }
 
-.colorway-card {
+.color-panel-scroll {
+  max-height: min(calc(72vh - 30px), 490px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 6px;
+  scrollbar-gutter: stable;
+}
+
+.colorway-row {
+  position: relative;
   display: grid;
-  gap: 5px;
-  align-items: start;
+  gap: 6px;
+  overflow: visible;
+}
+
+.colorway-row.is-swap-open {
+  z-index: 8;
+}
+
+.colorway-row-button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
   width: 100%;
-  padding: 8px;
-  border: 1px solid rgba(17, 17, 17, 0.06);
-  border-radius: 8px;
-  background: var(--paper-strong);
+  padding: 0;
   color: var(--ink);
   text-align: left;
 }
 
-.colorway-card.is-selected {
-  border-color: rgba(17, 17, 17, 0.1);
-  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.08);
+.colorway-row-button:hover .colorway-row-label {
+  opacity: 0.72;
 }
 
-.colorway-copy span {
-  display: block;
-  font-size: 0.76rem;
-  line-height: 1.15;
+.colorway-row-status,
+.custom-stop-count,
+.color-swap-value {
+  color: var(--ink-soft);
+  font-size: 0.74rem;
+  line-height: 1;
+}
+
+.colorway-row-status {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 7px;
+  border: 1px solid rgba(17, 17, 17, 0.08);
+  border-radius: 999px;
+  background: rgba(17, 17, 17, 0.04);
 }
 
 .colorway-swatches {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 4px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
 }
 
-.colorway-swatch {
+.colorway-swatch-button,
+.swap-library-swatch {
+  position: relative;
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  padding: 0;
+  border: 1px solid rgba(17, 17, 17, 0.08);
+  border-radius: 999px;
+  background: transparent;
+  overflow: hidden;
+}
+
+.colorway-swatch-button {
+  box-shadow: 0 0 0 1px rgba(17, 17, 17, 0.04);
+}
+
+.colorway-swatch,
+.swap-library-swatch span,
+.color-swap-preview {
+  position: relative;
   display: block;
   width: 100%;
-  height: 10px;
-  border-radius: 2px;
-  box-shadow: inset 0 0 0 1px rgba(17, 17, 17, 0.08);
+  height: 100%;
 }
 
-.custom-stops {
-  padding: 10px;
-  border: 1px solid rgba(17, 17, 17, 0.06);
-  border-radius: 8px;
-  background: var(--paper-soft);
+.colorway-swatch-button.is-active,
+.swap-library-swatch.is-selected {
+  border-color: rgba(17, 17, 17, 0.9);
+  box-shadow: 0 0 0 1px rgba(17, 17, 17, 0.9);
 }
 
-.custom-stop-row {
+.custom-stop-toolbar,
+.color-swap-header,
+.color-swap-current {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+
+.color-swap-panel {
+  width: 248px;
   display: grid;
-  grid-template-columns: 32px minmax(0, 1fr) auto;
-  gap: 6px;
-  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid rgba(17, 17, 17, 0.08);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(12px);
 }
 
-.export-preview-card {
-  padding: 10px;
-  border: 1px solid rgba(17, 17, 17, 0.06);
-  border-radius: 8px;
-  background: var(--paper-soft);
+.color-swap-panel--floating {
+  position: absolute;
+  top: 0;
+  right: calc(100% + 14px);
+  z-index: 10;
 }
 
-.export-preview-copy {
-  margin: 6px 0 10px;
+.color-swap-preview {
+  position: relative;
+  width: 42px;
+  height: 42px;
+  flex: 0 0 42px;
+  border-radius: 10px;
+  border: 1px solid rgba(17, 17, 17, 0.08);
+  overflow: hidden;
+  box-shadow: 0 2px 7px rgba(17, 17, 17, 0.08);
 }
 
-.export-dimension-pill {
-  display: inline-flex;
-  align-items: center;
-  padding: 6px 10px;
-  border-radius: 999px;
-  background: rgba(17, 17, 17, 0.08);
-  color: var(--ink);
-  font-size: 0.78rem;
-  line-height: 1;
+.color-swap-library {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.swap-library-swatch {
+  box-shadow: 0 0 0 1px rgba(17, 17, 17, 0.04);
 }
 
 .aspect-preset-grid,
@@ -952,6 +1027,10 @@ button {
     display: block;
   }
 
+  .color-panel .panel-surface {
+    overflow: visible;
+  }
+
   .preset-folder {
     right: 14px;
     left: 14px;
@@ -971,22 +1050,31 @@ button {
     grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
   }
 
-  .colorway-grid {
-    grid-template-columns: 1fr;
-  }
-
   .aspect-preset-grid,
   .export-actions,
   .export-input-grid {
     grid-template-columns: 1fr;
   }
 
-  .custom-stop-row {
-    grid-template-columns: 32px minmax(0, 1fr);
+  .colorway-swatches {
+    gap: 8px;
   }
 
-  .custom-stop-row .small-button {
-    grid-column: 1 / -1;
+  .colorway-swatch-button {
+    width: 16px;
+    height: 16px;
+    flex-basis: 16px;
+  }
+
+  .color-swap-panel--floating {
+    left: 0;
+    right: auto;
+    width: 100%;
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.08);
+  }
+
+  .color-swap-library {
+    grid-template-columns: repeat(auto-fit, minmax(24px, 1fr));
   }
 
   .bottom-controls {

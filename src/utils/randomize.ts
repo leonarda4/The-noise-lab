@@ -4,6 +4,7 @@ import {
   cloneNoiseConfig,
   COLOR_CONTROLS,
   COLORWAYS,
+  getColorStops,
   getNoiseDefinition,
   getGradientControls,
 } from "../config";
@@ -77,6 +78,7 @@ export const randomizeCurrentConfiguration = (
   const colorwayPool = COLORWAYS.filter((colorway) => colorway.key !== "custom");
   const randomColorway = colorwayPool[Math.floor(rng() * colorwayPool.length)];
   nextColor.colorwayId = randomColorway.key;
+  nextColor.editedStops = [];
 
   const movementPool = [
     "static",
@@ -122,10 +124,7 @@ export const approximatePresetBackground = (
   gradient: GradientConfig,
   color: ColorConfig,
 ) => {
-  const colors =
-    color.colorwayId === "custom"
-      ? color.customStops
-      : COLORWAYS.find((colorway) => colorway.key === color.colorwayId)!.colors;
+  const colors = getColorStops(color);
 
   if (gradient.type === "radial" || gradient.type === "fragmentedRadial") {
     return `radial-gradient(circle at 35% 35%, ${colors.join(", ")})`;

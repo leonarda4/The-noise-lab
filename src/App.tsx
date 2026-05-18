@@ -11,6 +11,9 @@ import {
   DEFAULT_GRADIENT_CONFIG,
   DEFAULT_NOISE_CONFIG,
   formatPresetLabel,
+  getColorStops,
+  MAX_COLOR_STOPS,
+  MIN_COLOR_STOPS,
 } from "./config";
 import { ColorPanel } from "./components/ColorPanel";
 import { ExportPanel } from "./components/ExportPanel";
@@ -52,7 +55,7 @@ const makePresetTabId = () => `tab-${makePresetId()}`;
 const THUMBNAIL_BACKFILL_BATCH_SIZE = 4;
 const ALL_PRESET_TAB_ID = "__all-presets__";
 const EXPORT_DIMENSION_MIN = 64;
-const EXPORT_DIMENSION_MAX = 4096;
+const EXPORT_DIMENSION_MAX = 8192;
 const EXPORT_DURATION_MIN = 1;
 const EXPORT_DURATION_MAX = 60;
 const DEFAULT_EXPORT_SIZE: ExportSize = {
@@ -421,9 +424,10 @@ export default function App() {
     setColorConfig((previous) => ({
       ...previous,
       colorwayId,
+      editedStops: [],
       customStops:
         colorwayId === "custom"
-          ? previous.customStops.length >= 3
+          ? previous.customStops.length >= MIN_COLOR_STOPS
             ? previous.customStops
             : [...COLORWAYS.find((colorway) => colorway.key === "custom")!.colors]
           : previous.customStops,
@@ -447,37 +451,73 @@ export default function App() {
     }));
   };
 
-  const handleCustomStopChange = (index: number, value: string) => {
-    setColorConfig((previous) => ({
-      ...previous,
-      customStops: previous.customStops.map((stop, stopIndex) =>
-        stopIndex === index ? value : stop,
-      ),
-    }));
-  };
-
-  const handleAddCustomStop = () => {
+  const handleColorStopChange = (index: number, value: string) => {
     setColorConfig((previous) => {
-      if (previous.customStops.length >= 5) {
+      const currentStops = getColorStops(previous);
+      if (index < 0 || index >= currentStops.length) {
         return previous;
+      }
+
+      const nextStops = currentStops.map((stop, stopIndex) =>
+        stopIndex === index ? value : stop,
+      );
+
+      if (previous.colorwayId === "custom") {
+        return {
+          ...previous,
+          customStops: nextStops,
+          editedStops: [],
+        };
       }
 
       return {
         ...previous,
-        customStops: [...previous.customStops, "#ffffff"],
+        editedStops: nextStops,
       };
     });
   };
 
-  const handleRemoveCustomStop = (index: number) => {
+  const handleAddCustomStop = () => {
     setColorConfig((previous) => {
-      if (previous.customStops.length <= 3) {
+      if (previous.customStops.length >= MAX_COLOR_STOPS) {
         return previous;
       }
 
       return {
         ...previous,
-        customStops: previous.customStops.filter((_, stopIndex) => stopIndex !== index),
+        customStops: [
+          ...previous.customStops,
+          previous.customStops[previous.customStops.length - 1] ?? "#ffffff",
+        ],
+        editedStops: [],
+      };
+    });
+  };
+
+  const handleRemoveColorStop = (index: number) => {
+    setColorConfig((previous) => {
+      const currentStops = getColorStops(previous);
+      if (
+        index < 0 ||
+        index >= currentStops.length ||
+        currentStops.length <= MIN_COLOR_STOPS
+      ) {
+        return previous;
+      }
+
+      const nextStops = currentStops.filter((_, stopIndex) => stopIndex !== index);
+
+      if (previous.colorwayId !== "custom") {
+        return {
+          ...previous,
+          editedStops: nextStops,
+        };
+      }
+
+      return {
+        ...previous,
+        customStops: nextStops,
+        editedStops: [],
       };
     });
   };
@@ -743,9 +783,9 @@ export default function App() {
             onAddCustomStop={handleAddCustomStop}
             onBlendModeChange={handleBlendModeChange}
             onColorwayChange={handleColorwayChange}
-            onCustomStopChange={handleCustomStopChange}
+            onStopChange={handleColorStopChange}
             onParamChange={handleColorParamChange}
-            onRemoveCustomStop={handleRemoveCustomStop}
+            onRemoveStop={handleRemoveColorStop}
             isOpen={colorPanelOpen}
             onToggle={() => setColorPanelOpen((value) => !value)}
           />
@@ -756,6 +796,7 @@ export default function App() {
             isExportingPhoto={activeExport === "photo"}
             isExportingVideo={activeExport === "video"}
             isOpen={exportPanelOpen}
+            maxDimension={EXPORT_DIMENSION_MAX}
             onApplyPreset={handleApplyExportPreset}
             onDurationChange={(value) =>
               setVideoDurationSeconds(clampExportDuration(value))}

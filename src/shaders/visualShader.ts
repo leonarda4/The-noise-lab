@@ -523,6 +523,112 @@ vec3 sampleNoise(vec2 local, vec2 uv, float aspect, float time, float noisePhase
     );
     n = mix(edge, fragments, u_fragmentation * 0.7);
     v = (hash22(floor(q) + cell.z * 31.0) - 0.5) * (0.3 + u_fragmentation);
+  } else if (u_noiseType == 11) {
+    vec2 q = evolveField(
+      local * (1.4 + u_noiseScale * 2.6),
+      motionTime * 0.55,
+      0.08 + u_timeInfluence * 0.18
+    );
+    float r = length(q);
+    float rings = sin(r * (10.0 + u_sharpness * 18.0) - motionTime * (0.6 + u_noiseSpeed * 1.8));
+    rings = 0.5 + 0.5 * rings;
+    float bloom = saturateFloat(1.0 - r * mix(1.8, 0.78, saturateFloat(u_amplitude / 1.5)));
+    float texture = fbmBase(
+      q * (0.9 + u_smoothness * 1.6) + vec2(motionTime * 0.08, -motionTime * 0.05),
+      min(u_octaves, 5.0),
+      u_lacunarity,
+      u_gain
+    );
+    n = clamp(rings * 0.56 + bloom * (0.34 + u_amplitude * 0.18) + texture * 0.18, 0.0, 1.0);
+    float softened = mix(n, smoothstep(0.0, 1.0, n), u_blur);
+    n = mix(n, softened, 0.45 + u_blur * 0.35);
+    vec2 radial = normalize(q + vec2(1e-5));
+    v = radial * (bloom - 0.35) * (0.16 + u_amplitude * 0.14)
+      + noiseGradient(q * 0.7 + 4.2) * 0.05;
+  } else if (u_noiseType == 12) {
+    vec2 q = evolveField(
+      local * (1.6 + u_noiseScale * 2.8),
+      motionTime * 0.9,
+      0.1 + u_turbulenceStrength * 0.22
+    );
+    float spin = motionTime * (0.35 + u_swirlAmount * 1.45);
+    vec2 rotated = rotate2d(spin) * q;
+    float xWeight = mix(0.24, 0.08, u_compression);
+    float yWeight = mix(1.8, 4.4, u_compression);
+    float ellD = sqrt(rotated.x * rotated.x * xWeight + rotated.y * rotated.y * yWeight);
+    float ellRings = sin(ellD * (6.0 + u_sharpness * 14.0) - motionTime * (1.0 + u_noiseSpeed * 2.2));
+    ellRings = 0.5 + 0.5 * ellRings;
+    float spokeCount = floor(mix(4.0, 12.0, u_turbulenceStrength) + 0.5);
+    float spines = pow(
+      abs(sin(atan(q.y, q.x) * max(1.0, spokeCount) + motionTime * (0.8 + u_swirlAmount * 1.4))),
+      mix(2.0, 10.0, u_sharpness)
+    );
+    float texture = fbmBase(
+      q * (1.1 + u_turbulenceStrength * 1.6) + vec2(motionTime * 0.18, motionTime * 0.11),
+      min(u_octaves, 5.0),
+      u_lacunarity,
+      u_gain
+    );
+    float center = saturateFloat(1.0 - length(q) * 0.55);
+    n = clamp(ellRings * 0.48 + spines * 0.38 + texture * 0.2 + center * 0.16, 0.0, 1.0);
+    n = mix(n, pow(n, mix(1.0, 0.5, u_sharpness)), u_sharpness * 0.55);
+    vec2 radial = normalize(q + vec2(1e-5));
+    v = radial * (spines - 0.4) * (0.14 + u_swirlAmount * 0.16)
+      + noiseGradient(rotated * 0.8 + 8.6) * (0.08 + u_turbulenceStrength * 0.08);
+  } else if (u_noiseType == 13) {
+    vec2 q = local * (1.25 + u_noiseScale * 1.9);
+    float sag = sin(q.x * 1.7) * mix(0.04, 0.32, saturateFloat(u_flowStrength / 1.5));
+    float drift = fbmBase(
+      vec2(q.x * 0.9 + motionTime * 0.04, q.y * 0.65 - motionTime * 0.02),
+      min(u_octaves, 5.0),
+      u_lacunarity,
+      u_gain
+    );
+    float yw = q.y - sag + (drift - 0.5) * mix(0.04, 0.28, u_blur);
+    float bands = sin(yw * (6.0 + u_smoothness * 12.0) - motionTime * (0.25 + u_noiseSpeed * 0.7));
+    bands = 0.5 + 0.5 * bands;
+    float gravity = pow(saturateFloat(uv.y), mix(1.25, 0.7, saturateFloat(u_amplitude / 1.5)));
+    n = clamp(bands * 0.48 + gravity * (0.28 + u_amplitude * 0.18) + drift * 0.24, 0.0, 1.0);
+    n = mix(n, smoothstep(0.06, 0.92, n), 0.35 + u_smoothness * 0.45);
+    v = vec2((drift - 0.5) * 0.08, gravity * (0.08 + u_flowStrength * 0.08));
+  } else if (u_noiseType == 14) {
+    vec2 q = local * (0.9 + u_noiseScale * 1.35);
+    float horizon = fbmBase(
+      vec2(q.x * 0.6 + motionTime * 0.02, q.y * 0.12),
+      max(2.0, min(u_octaves, 4.0)),
+      1.9,
+      0.52
+    );
+    float lineSpan = mix(12.0, 4.0, u_compression);
+    float wave = sin(q.y * lineSpan + horizon * (0.6 + u_amplitude * 1.8) - motionTime * (0.12 + u_noiseSpeed * 0.45));
+    wave = 0.5 + 0.5 * wave;
+    n = clamp(wave * 0.72 + horizon * 0.28, 0.0, 1.0);
+    n = mix(n, smoothstep(0.0, 1.0, n), 0.45 + u_smoothness * 0.35);
+    n = mix(n, 0.5 + (n - 0.5) * 0.65, u_blur);
+    v = vec2((horizon - 0.5) * 0.1, sin(q.y + motionTime * 0.2) * 0.02);
+  } else if (u_noiseType == 15) {
+    vec2 q = local * (1.35 + u_noiseScale * 2.2);
+    float guide = fbmBase(
+      vec2(q.x * 0.16 + motionTime * 0.03, q.y * 1.35 + motionTime * 0.09),
+      3.0,
+      u_lacunarity,
+      u_gain
+    );
+    float order = saturateFloat(u_compression);
+    float spacing = mix(0.9, 1.25, order);
+    float wobble = guide * mix(1.3, 0.18, order) * (0.4 + u_directionInstability * 1.6);
+    float columns = sin(q.x * spacing * (8.0 + u_sharpness * 20.0) + wobble);
+    columns = 0.5 + 0.5 * columns;
+    float upward = pow(saturateFloat(1.0 - uv.y), mix(1.2, 0.65, saturateFloat(u_flowStrength / 1.5)));
+    float detail = fbmBase(
+      vec2(q.x * 1.6 + motionTime * 0.05, q.y * 0.55 - motionTime * 0.02),
+      2.0,
+      u_lacunarity,
+      u_gain
+    );
+    n = clamp(columns * 0.56 + upward * (0.28 + u_flowStrength * 0.18) + detail * 0.16, 0.0, 1.0);
+    n = mix(n, smoothstep(0.08, 0.94, n), 0.42 + u_sharpness * 0.35);
+    v = vec2((columns - 0.5) * 0.1, -upward * (0.06 + u_flowStrength * 0.1));
   } else {
     vec2 pixel = uv * u_resolution * mix(0.3, 1.8, u_grainSize);
     float dither = blueNoiseStyle(pixel + u_noiseSeed * 13.0 + time * u_flickerAmount * 30.0);

@@ -3,6 +3,7 @@ import type { PhotoExportFormat } from "../types";
 interface ExportPanelProps {
   width: number;
   height: number;
+  maxDimension: number;
   durationSeconds: number;
   photoFormat: PhotoExportFormat;
   isExportingPhoto: boolean;
@@ -25,23 +26,74 @@ const EXPORT_PRESETS = [
   { label: "16:9", width: 1920, height: 1080 },
   { label: "9:16", width: 1080, height: 1920 },
 ] as const;
+const RESOLUTION_SCALES = [1, 1.5, 2, 3, 4, 6] as const;
+const DEFAULT_RESOLUTION_BASE_EDGE = 1080;
 
-const formatAspectRatio = (width: number, height: number) => {
+const matchesAspectRatio = (
+  leftWidth: number,
+  leftHeight: number,
+  rightWidth: number,
+  rightHeight: number,
+) => leftWidth * rightHeight === leftHeight * rightWidth;
+
+const getResolutionBaseSize = (width: number, height: number) => {
   const safeWidth = Math.max(1, Math.round(width));
   const safeHeight = Math.max(1, Math.round(height));
+  const presetMatch = EXPORT_PRESETS.find((preset) =>
+    matchesAspectRatio(preset.width, preset.height, safeWidth, safeHeight));
 
-  const gcd = (left: number, right: number): number =>
-    right ? gcd(right, left % right) : left;
-
-  const divisor = gcd(safeWidth, safeHeight);
-  const reducedWidth = safeWidth / divisor;
-  const reducedHeight = safeHeight / divisor;
-
-  if (reducedWidth <= 32 && reducedHeight <= 32) {
-    return `${reducedWidth}:${reducedHeight}`;
+  if (presetMatch) {
+    return {
+      width: presetMatch.width,
+      height: presetMatch.height,
+    };
   }
 
-  return `${(safeWidth / safeHeight).toFixed(2)}:1`;
+  if (safeWidth <= safeHeight) {
+    return {
+      width: DEFAULT_RESOLUTION_BASE_EDGE,
+      height: Math.round(
+        (DEFAULT_RESOLUTION_BASE_EDGE * safeHeight) / safeWidth,
+      ),
+    };
+  }
+
+  return {
+    width: Math.round((DEFAULT_RESOLUTION_BASE_EDGE * safeWidth) / safeHeight),
+    height: DEFAULT_RESOLUTION_BASE_EDGE,
+  };
+};
+
+const buildResolutionOptions = (
+  width: number,
+  height: number,
+  maxDimension: number,
+) => {
+  const baseSize = getResolutionBaseSize(width, height);
+  const options: { value: string; label: string; width: number; height: number }[] = [];
+
+  for (const scale of RESOLUTION_SCALES) {
+    const scaledWidth = Math.round(baseSize.width * scale);
+    const scaledHeight = Math.round(baseSize.height * scale);
+
+    if (scaledWidth > maxDimension || scaledHeight > maxDimension) {
+      continue;
+    }
+
+    const value = `${scaledWidth}x${scaledHeight}`;
+    if (options.some((option) => option.value === value)) {
+      continue;
+    }
+
+    options.push({
+      value,
+      label: `${scaledWidth} × ${scaledHeight}`,
+      width: scaledWidth,
+      height: scaledHeight,
+    });
+  }
+
+  return options;
 };
 
 const handleNumberInput = (
@@ -67,6 +119,7 @@ const handleDecimalInput = (
 export function ExportPanel({
   width,
   height,
+  maxDimension,
   durationSeconds,
   photoFormat,
   isExportingPhoto,
@@ -82,7 +135,11 @@ export function ExportPanel({
   onExportVideo,
 }: ExportPanelProps) {
   const isBusy = isExportingPhoto || isExportingVideo;
-  const aspectRatioLabel = formatAspectRatio(width, height);
+  const resolutionOptions = buildResolutionOptions(width, height, maxDimension);
+  const selectedResolutionValue =
+    resolutionOptions.find(
+      (option) => option.width === width && option.height === height,
+    )?.value ?? "custom";
 
   return (
     <section className={`control-panel export-panel ${isOpen ? "is-open" : "is-collapsed"}`}>
@@ -97,24 +154,8 @@ export function ExportPanel({
       </button>
 
       <div className="panel-surface">
-        <div className="panel-block export-preview-card">
-          <div className="section-heading-row">
-            <span className="control-label">Preview crop</span>
-            <span>{aspectRatioLabel}</span>
-          </div>
-          <p className="control-helper export-preview-copy">
-            The centered frame on the canvas matches the exported crop.
-          </p>
-          <div className="export-dimension-pill">
-            {width} × {height}
-          </div>
-        </div>
-
         <div className="panel-block">
-          <div className="section-heading-row">
-            <span className="control-label">Aspect presets</span>
-            <span>Quick sizes</span>
-          </div>
+          <span className="control-label">Aspect presets</span>
           <div className="aspect-preset-grid">
             {EXPORT_PRESETS.map((preset) => (
               <button
@@ -129,12 +170,42 @@ export function ExportPanel({
           </div>
         </div>
 
+        <div className="panel-block">
+          <label className="control-card control-card--select">
+            <div className="control-row">
+              <span className="control-label">Resolution</span>
+              <span className="control-value">{width} × {height}</span>
+            </div>
+            <select
+              className="control-select"
+              onChange={(event) => {
+                const option = resolutionOptions.find(
+                  (entry) => entry.value === event.target.value,
+                );
+
+                if (option) {
+                  onApplyPreset(option.width, option.height);
+                }
+              }}
+              value={selectedResolutionValue}
+            >
+              {resolutionOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+              <option value="custom">Custom</option>
+            </select>
+          </label>
+        </div>
+
         <div className="panel-block export-input-grid">
           <label className="export-field">
             <span className="control-label">Width</span>
             <input
               className="export-number-input"
               inputMode="numeric"
+              max={maxDimension}
               min={64}
               onChange={(event) =>
                 handleNumberInput(event.target.value, onWidthChange)}
@@ -149,6 +220,7 @@ export function ExportPanel({
             <input
               className="export-number-input"
               inputMode="numeric"
+              max={maxDimension}
               min={64}
               onChange={(event) =>
                 handleNumberInput(event.target.value, onHeightChange)}
@@ -173,7 +245,6 @@ export function ExportPanel({
               <option value="png">PNG</option>
               <option value="jpeg">JPEG</option>
             </select>
-            <div className="control-helper">Still exports use the selected size exactly.</div>
           </label>
         </div>
 
@@ -193,9 +264,6 @@ export function ExportPanel({
               type="number"
               value={durationSeconds}
             />
-            <div className="control-helper">
-              Video downloads as WebM or MP4, depending on browser support.
-            </div>
           </label>
         </div>
 
