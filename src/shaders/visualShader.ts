@@ -8,6 +8,8 @@ void main() {
 }
 `;
 
+const MAX_SHADER_PALETTE_STOPS = 7;
+
 export const fragmentShaderSource = `
 precision highp float;
 
@@ -25,7 +27,8 @@ uniform int u_movementType;
 uniform int u_blendMode;
 
 uniform int u_paletteCount;
-uniform vec3 u_palette[5];
+uniform vec3 u_palette[${MAX_SHADER_PALETTE_STOPS}];
+uniform float u_primaryColorBias;
 
 uniform float u_noiseScale;
 uniform float u_noiseSpeed;
@@ -299,7 +302,13 @@ vec3 paletteAt(int index) {
   if (index == 3) {
     return u_palette[3];
   }
-  return u_palette[4];
+  if (index == 4) {
+    return u_palette[4];
+  }
+  if (index == 5) {
+    return u_palette[5];
+  }
+  return u_palette[6];
 }
 
 int clampPaletteIndex(int index) {
@@ -338,6 +347,17 @@ vec3 applyColorAdjustments(vec3 color) {
   color = mix(vec3(luminance), color, u_saturation);
   color *= u_brightness;
   return saturateVec3(color);
+}
+
+vec3 biasTowardPrimaryColor(vec3 color, float noiseValue) {
+  float bias = saturateFloat(u_primaryColorBias);
+  if (bias <= 0.0) {
+    return color;
+  }
+
+  float tintStrength = bias * (0.55 + noiseValue * 0.2);
+  vec3 primaryTint = mix(color, paletteAt(0), 0.78);
+  return mix(color, primaryTint, tintStrength);
 }
 
 vec2 applyMovement(vec2 p, float phase) {
@@ -657,6 +677,7 @@ void main() {
 
   vec3 noiseLayer = mix(vec3(noiseValue), echo, 0.72);
   vec3 color = applyBlendMode(primary, noiseLayer, noiseValue);
+  color = biasTowardPrimaryColor(color, noiseValue);
   color = applyColorAdjustments(color);
 
   float glow = pow(noiseValue, 1.8) * 0.12;

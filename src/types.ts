@@ -109,6 +109,12 @@ export type ColorwayId =
   | "fear"
   | "determination"
   | "neutralStudy"
+  | "happyJoy"
+  | "sereneCalm"
+  | "sadEmotion"
+  | "fearEmotion"
+  | "angerEmotion"
+  | "determinationEmotion"
   | "custom";
 
 export type SelectOption<T extends string | number> = {
@@ -203,6 +209,7 @@ export interface ColorwayDefinition {
   label: string;
   description: string;
   colors: string[];
+  primaryBias?: number;
 }
 
 export type PhotoExportFormat = "png" | "jpeg";

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { getColorwayLabel } from "../config";
 import type { PresetTab, SavedPreset } from "../types";
 
 interface PresetCardProps {
@@ -72,7 +73,7 @@ export function PresetCard({
         )}
 
         <p className="preset-meta">{preset.noise.type} / {preset.gradient.type}</p>
-        <p className="preset-meta">{preset.color.colorwayId}</p>
+        <p className="preset-meta">{getColorwayLabel(preset.color.colorwayId)}</p>
         <p className="preset-date">{createdAt}</p>
         <select
           aria-label="Preset tab"

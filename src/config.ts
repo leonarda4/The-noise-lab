@@ -97,39 +97,81 @@ export const BLEND_MODE_OPTIONS: SelectOption<BlendMode>[] = [
 export const COLORWAYS: ColorwayDefinition[] = [
   {
     key: "joy",
-    label: "Joy",
+    label: "Preset 1",
     description: "Soft light and optimistic lift.",
     colors: ["#f7e26b", "#ff8cb7", "#8ce4ff", "#c9b7ff", "#fff8d2"],
   },
   {
     key: "sadness",
-    label: "Sadness",
+    label: "Preset 2",
     description: "Muted cold tones with suspended motion.",
     colors: ["#6984c7", "#9ca3b2", "#c8c0dd", "#7f9388", "#eef2ff"],
   },
   {
     key: "anger",
-    label: "Anger",
+    label: "Preset 3",
     description: "High contrast heat with clipped highlights.",
     colors: ["#ff4338", "#15090a", "#ff3ca8", "#ffffff", "#8f1118"],
   },
   {
     key: "fear",
-    label: "Fear",
+    label: "Preset 4",
     description: "Acidic unease and unstable edges.",
     colors: ["#d7ff32", "#11331a", "#050505", "#ff7f23", "#7d9b0f"],
   },
   {
     key: "determination",
-    label: "Determination",
+    label: "Preset 5",
     description: "Forward energy with crisp highlights.",
     colors: ["#173fbe", "#fa5c22", "#7f3eff", "#fefefe", "#2e88ff"],
   },
   {
     key: "neutralStudy",
-    label: "Neutral Study",
+    label: "Preset 6",
     description: "Monochrome material study.",
     colors: ["#050505", "#e8dfd4", "#878787", "#292929", "#f5f0ea"],
+  },
+  {
+    key: "happyJoy",
+    label: "Happy / Joy",
+    description: "Bright yellow core with cyan, green, lilac, coral, and white lift.",
+    colors: ["#FFF544", "#03C3FF", "#03FFFF", "#00BE34", "#DD8EFD", "#FC7580", "#FFFFFF"],
+    primaryBias: 0.24,
+  },
+  {
+    key: "sereneCalm",
+    label: "Serene / Calm",
+    description: "Cool cyan palette with white, teal, soft pink, and blue depth.",
+    colors: ["#03C3FF", "#03FFFF", "#FFFFFF", "#049998", "#DD8EFD", "#F693BD", "#028EDF"],
+    primaryBias: 0.24,
+  },
+  {
+    key: "sadEmotion",
+    label: "Sad",
+    description: "Deep indigo palette with slate, violet, amber, yellow, and black contrast.",
+    colors: ["#020691", "#028EDF", "#807C8D", "#5929B0", "#C26000", "#FFF544", "#030201"],
+    primaryBias: 0.24,
+  },
+  {
+    key: "fearEmotion",
+    label: "Fear",
+    description: "Dark palette with amber, gold, grey, indigo, red, and white tension.",
+    colors: ["#030201", "#C26000", "#CFAA01", "#807C8D", "#020691", "#F30700", "#FFFFFF"],
+    primaryBias: 0.24,
+  },
+  {
+    key: "angerEmotion",
+    label: "Anger",
+    description: "Hot red-orange palette with green, teal, grey, violet, and coral friction.",
+    colors: ["#F30700", "#C26000", "#00BE34", "#049998", "#807C8D", "#5929B0", "#FC7580"],
+    primaryBias: 0.24,
+  },
+  {
+    key: "determinationEmotion",
+    label: "Determination",
+    description: "Lilac-led palette with orange, red-orange, teal, violet, gold, and black.",
+    colors: ["#DD8EFD", "#FF7B00", "#FE5103", "#049998", "#5929B0", "#CFAA01", "#030201"],
+    primaryBias: 0.24,
   },
   {
     key: "custom",
@@ -538,6 +580,13 @@ export const COLORWAY_OPTIONS: SelectOption<ColorwayDefinition["key"]>[] =
     value: colorway.key,
     label: colorway.label,
   }));
+
+export const getColorwayLabel = (colorwayId: ColorwayDefinition["key"]) =>
+  COLORWAY_BY_ID[colorwayId].label;
+
+export const getColorwayPrimaryBias = (
+  colorwayId: ColorwayDefinition["key"],
+) => COLORWAY_BY_ID[colorwayId].primaryBias ?? 0;
 
 export const getNoiseDefinition = (type: NoiseConfig["type"]) =>
   NOISE_DEFINITIONS.find((definition) => definition.key === type)!;

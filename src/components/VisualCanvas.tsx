@@ -4,6 +4,7 @@ import {
   BLEND_MODE_TO_INDEX,
   COLOR_PARAM_KEYS,
   getColorStops,
+  getColorwayPrimaryBias,
   GRADIENT_PARAM_KEYS,
   GRADIENT_TYPE_TO_INDEX,
   MOVEMENT_TO_INDEX,
@@ -61,6 +62,7 @@ interface VisualState {
   movementType: GradientConfig["movement"];
   movementPhaseBlend: number;
   blendMode: ColorConfig["blendMode"];
+  primaryColorBias: number;
   noiseParams: NoiseConfig["params"];
   gradientParams: GradientConfig["params"];
   colorParams: ColorConfig["params"];
@@ -110,6 +112,7 @@ const UNIFORM_NAMES = [
   "u_blendMode",
   "u_paletteCount",
   "u_palette",
+  "u_primaryColorBias",
   "u_noiseScale",
   "u_noiseSpeed",
   "u_noiseIntensity",
@@ -168,6 +171,7 @@ const DIRECTIONAL_MOVEMENT_EASE_START = 0.88;
 const VIDEO_EXPORT_FRAME_RATE = 60;
 const JPEG_EXPORT_QUALITY = 0.92;
 const MAX_EXPORT_RENDER_SIZE_FALLBACK = 8192;
+const MAX_SHADER_PALETTE_STOPS = 7;
 const DIRECTIONAL_MOVEMENT_TYPES = new Set<GradientConfig["movement"]>([
   "moveLeft",
   "moveRight",
@@ -226,12 +230,12 @@ const getGradientPhaseRate = (visualState: VisualState) =>
 
 const buildPalette = (colorConfig: ColorConfig) => {
   const palette = getColorStops(colorConfig)
-    .slice(0, 5)
+    .slice(0, MAX_SHADER_PALETTE_STOPS)
     .map((stop) => hexToRgb(stop));
   const paddedPalette = [...palette];
-  const paletteCount = Math.min(palette.length, 5);
+  const paletteCount = Math.min(palette.length, MAX_SHADER_PALETTE_STOPS);
 
-  while (paddedPalette.length < 5) {
+  while (paddedPalette.length < MAX_SHADER_PALETTE_STOPS) {
     const fallback = paddedPalette[paddedPalette.length - 1] ?? [1, 1, 1];
     paddedPalette.push([...fallback] as RgbColor);
   }
@@ -255,6 +259,7 @@ const buildVisualState = (
     movementType: gradientConfig.movement,
     movementPhaseBlend: 1,
     blendMode: colorConfig.blendMode,
+    primaryColorBias: getColorwayPrimaryBias(colorConfig.colorwayId),
     noiseParams: { ...noiseConfig.params },
     gradientParams: { ...gradientConfig.params },
     colorParams: { ...colorConfig.params },
@@ -269,6 +274,7 @@ const cloneVisualState = (state: VisualState): VisualState => ({
   movementType: state.movementType,
   movementPhaseBlend: state.movementPhaseBlend,
   blendMode: state.blendMode,
+  primaryColorBias: state.primaryColorBias,
   noiseParams: { ...state.noiseParams },
   gradientParams: { ...state.gradientParams },
   colorParams: { ...state.colorParams },
@@ -330,6 +336,7 @@ const interpolateVisualState = (
     movementType: discreteState.movementType,
     movementPhaseBlend,
     blendMode: discreteState.blendMode,
+    primaryColorBias: lerp(from.primaryColorBias, to.primaryColorBias, eased),
     noiseParams: interpolateValues(
       NOISE_PARAM_KEYS,
       from.noiseParams,
@@ -567,6 +574,11 @@ const renderRendererFrame = (
     gl.uniform3fv(uniformLocations.u_palette, paletteData);
   }
   setUniform1i(gl, uniformLocations.u_paletteCount, visualState.paletteCount);
+  setUniform1f(
+    gl,
+    uniformLocations.u_primaryColorBias,
+    visualState.primaryColorBias,
+  );
 
   const noise = visualState.noiseParams;
   setUniform1f(gl, uniformLocations.u_noiseScale, noise.scale);
