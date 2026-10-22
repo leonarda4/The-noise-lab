@@ -6,6 +6,7 @@ interface SavedPresetsPanelProps {
   activeTabId: string;
   allTabId: string;
   allPresets: SavedPreset[];
+  isLoading: boolean;
   isOpen: boolean;
   isShowingAllTab: boolean;
   onCreateTab: () => void;
@@ -25,6 +26,7 @@ export function SavedPresetsPanel({
   activeTabId,
   allTabId,
   allPresets,
+  isLoading,
   isOpen,
   isShowingAllTab,
   onCreateTab,
@@ -53,12 +55,14 @@ export function SavedPresetsPanel({
     <section className={`preset-folder ${isOpen ? "is-open" : "is-closed"}`}>
       <button
         aria-expanded={isOpen}
+        aria-busy={isLoading}
         className="folder-tab"
+        disabled={isLoading}
         onClick={onToggle}
         type="button"
       >
-        <span>Saved presets</span>
-        <span className="folder-tab-count">{allPresets.length}</span>
+        <span>{isLoading ? "Loading presets…" : "Saved presets"}</span>
+        {!isLoading && <span className="folder-tab-count">{allPresets.length}</span>}
       </button>
 
       <div className="folder-card">

@@ -11,7 +11,7 @@ Real-time browser prototype for exploring procedural noise systems, animated gra
 
 ## Run locally
 
-1. Open a terminal in `web/`
+1. Open a terminal in the repository root.
 2. Install dependencies:
 
 ```bash
@@ -32,7 +32,13 @@ npm run dev
 npm run build
 ```
 
-The built files are written to `web/dist/`.
+The built files are written to `dist/`. On Vercel, use `npm run build` as the build command and `dist` as the output directory.
+
+Preset loading and browser persistence regression checks can be run with:
+
+```bash
+node --test tests/presets.test.mjs
+```
 
 ## What is included
 
@@ -50,7 +56,9 @@ The built files are written to `web/dist/`.
 
 ## Notes
 
-- Presets are automatically loaded from and written back to `web/data/presets.json` while the Vite dev or preview server is running.
-- A browser cache copy is also kept as a fallback for offline recovery and thumbnail backfill.
-- Saved thumbnails are captured from the live WebGL canvas, written into preset JSON, and older presets without thumbnails are refreshed automatically on load.
+- During `npm run dev`, presets are automatically loaded from and written back to `data/presets.json`.
+- Production builds, including Vercel and `npm run preview`, include that JSON as a separate static asset. Deploying a new build publishes the committed recipes and their thumbnails.
+- On the deployed site, new presets, renames, tab assignments, and deletions are saved in the current browser. Existing browser changes survive reloads; later deployments add newly published preset and tab IDs. To share new recipes with everyone, export them, update `data/presets.json`, and deploy again.
+- A browser cache is kept for offline recovery and thumbnail backfill. If storage is tight, cached thumbnails are omitted and restored from the published library when available.
+- Saved thumbnails are captured from the live WebGL canvas; older presets without thumbnails are refreshed automatically on load.
 - The shader architecture is set up so each noise type produces a distinct modulation field rather than a flat texture swap.

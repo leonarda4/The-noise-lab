@@ -31,9 +31,18 @@ import type {
   PresetTab,
   SavedPreset,
 } from "../types";
+import publishedPresetsUrl from "../../data/presets.json?url";
 
 const PRESETS_STORAGE_KEY = "emotional-noise-lab:favourites";
 const PRESET_SCHEMA_VERSION = 3;
+export const repoPresetSyncEnabled = import.meta.env.DEV;
+
+type PublishedPresetIds = {
+  presets: string[];
+  tabs: string[];
+};
+
+let publishedPresetIds: PublishedPresetIds = { presets: [], tabs: [] };
 
 type SavePresetsResult = "full" | "without-thumbnails" | "failed";
 
@@ -303,29 +312,83 @@ const normalizePresetLibrary = (value: unknown): PresetLibrary => {
 };
 
 export const loadPresets = (): PresetLibrary => {
+  publishedPresetIds = { presets: [], tabs: [] };
   try {
     const raw = localStorage.getItem(PRESETS_STORAGE_KEY);
     if (!raw) {
       return emptyPresetLibrary();
     }
-    return normalizePresetLibrary(JSON.parse(raw));
+    const parsed: unknown = JSON.parse(raw);
+    if (isRecord(parsed) && isRecord(parsed.publishedPresetIds)) {
+      const ids = parsed.publishedPresetIds;
+      publishedPresetIds = {
+        presets: isStringArray(ids.presets) ? ids.presets : [],
+        tabs: isStringArray(ids.tabs) ? ids.tabs : [],
+      };
+    }
+    return normalizePresetLibrary(parsed);
   } catch {
     return emptyPresetLibrary();
   }
 };
 
+export const mergePublishedPresets = (
+  publishedLibrary: PresetLibrary,
+  cachedLibrary: PresetLibrary,
+): PresetLibrary => {
+  const seenPresetIds = new Set(publishedPresetIds.presets);
+  const seenTabIds = new Set(publishedPresetIds.tabs);
+  const cachedPresetIds = new Set(cachedLibrary.presets.map((preset) => preset.id));
+  const cachedTabIds = new Set(cachedLibrary.tabs.map((tab) => tab.id));
+  const publishedById = new Map(
+    publishedLibrary.presets.map((preset) => [preset.id, preset]),
+  );
+  const tabs = [
+    ...cachedLibrary.tabs,
+    ...publishedLibrary.tabs.filter(
+      (tab) => !cachedTabIds.has(tab.id) && !seenTabIds.has(tab.id),
+    ),
+  ];
+  const validTabIds = new Set(tabs.map((tab) => tab.id));
+  const presets = [
+    ...cachedLibrary.presets.map((preset) => ({
+      ...preset,
+      thumbnail: preset.thumbnail ?? publishedById.get(preset.id)?.thumbnail,
+    })),
+    ...publishedLibrary.presets.filter(
+      (preset) => !cachedPresetIds.has(preset.id) && !seenPresetIds.has(preset.id),
+    ),
+  ].map((preset) =>
+    preset.tabId && !validTabIds.has(preset.tabId)
+      ? { ...preset, tabId: undefined }
+      : preset,
+  );
+
+  // Remember every published ID so deletions survive reloads, while future
+  // deployments can introduce new presets without replacing browser edits.
+  publishedPresetIds = {
+    presets: [...new Set([...seenPresetIds, ...publishedById.keys()])],
+    tabs: [...new Set([...seenTabIds, ...publishedLibrary.tabs.map((tab) => tab.id)])],
+  };
+
+  return { tabs, presets };
+};
+
 export { type SavePresetsResult };
 
 export const savePresets = (library: PresetLibrary): SavePresetsResult => {
+  const payload = repoPresetSyncEnabled
+    ? library
+    : { ...library, publishedPresetIds };
   try {
-    localStorage.setItem(PRESETS_STORAGE_KEY, JSON.stringify(library));
+    localStorage.setItem(PRESETS_STORAGE_KEY, JSON.stringify(payload));
     return "full";
   } catch {
     try {
       localStorage.setItem(
         PRESETS_STORAGE_KEY,
         JSON.stringify({
-          ...library,
+          ...payload,
           presets: stripPresetThumbnails(library.presets),
         }),
       );
@@ -336,11 +399,12 @@ export const savePresets = (library: PresetLibrary): SavePresetsResult => {
   }
 };
 
-export const loadRepoPresets = async (): Promise<PresetLibrary | null> => {
+export const loadSharedPresets = async (): Promise<PresetLibrary | null> => {
   try {
-    const response = await fetch("/api/presets", {
-      cache: "no-store",
-    });
+    const response = await fetch(
+      repoPresetSyncEnabled ? "/api/presets" : publishedPresetsUrl,
+      repoPresetSyncEnabled ? { cache: "no-store" } : undefined,
+    );
     if (!response.ok) {
       return null;
     }
@@ -352,6 +416,10 @@ export const loadRepoPresets = async (): Promise<PresetLibrary | null> => {
 };
 
 export const syncRepoPresets = async (library: PresetLibrary) => {
+  if (!repoPresetSyncEnabled) {
+    return false;
+  }
+
   try {
     const response = await fetch("/api/presets", {
       method: "POST",

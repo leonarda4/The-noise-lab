@@ -42,7 +42,9 @@ import {
   exportPresets,
   importPresetsFromText,
   loadPresets,
-  loadRepoPresets,
+  loadSharedPresets,
+  mergePublishedPresets,
+  repoPresetSyncEnabled,
   savePresets,
   syncRepoPresets,
 } from "./utils/presets";
@@ -140,6 +142,7 @@ export default function App() {
   const [visualTransitionKey, setVisualTransitionKey] = useState(0);
   const [favourites, setFavourites] = useState<SavedPreset[]>([]);
   const [presetTabs, setPresetTabs] = useState<PresetTab[]>([]);
+  const [presetsLoading, setPresetsLoading] = useState(true);
   const [activePresetTabId, setActivePresetTabId] = useState(ALL_PRESET_TAB_ID);
   const [paused, setPaused] = useState(false);
   const [presetsDrawerOpen, setPresetsDrawerOpen] = useState(false);
@@ -186,32 +189,39 @@ export default function App() {
 
     const bootstrapPresets = async () => {
       const cachedLibrary = loadPresets();
-      const repoLibrary = await loadRepoPresets();
+      const sharedLibrary = await loadSharedPresets();
 
       if (isCancelled) {
         return;
       }
 
-      if (repoLibrary) {
-        const mergedLibrary = mergePresetLibraries(repoLibrary, cachedLibrary);
+      if (sharedLibrary) {
+        const mergedLibrary = repoPresetSyncEnabled
+          ? mergePresetLibraries(sharedLibrary, cachedLibrary)
+          : mergePublishedPresets(sharedLibrary, cachedLibrary);
 
         setFavourites(mergedLibrary.presets);
         setPresetTabs(mergedLibrary.tabs);
         setStatusMessage(
-          `Loaded ${mergedLibrary.presets.length} preset${mergedLibrary.presets.length === 1 ? "" : "s"} from repo JSON.`,
+          `Loaded ${mergedLibrary.presets.length} preset${mergedLibrary.presets.length === 1 ? "" : "s"} ${repoPresetSyncEnabled ? "from repo JSON." : "from the published library and this browser."}`,
         );
       } else {
         setFavourites(cachedLibrary.presets);
         setPresetTabs(cachedLibrary.tabs);
         if (cachedLibrary.presets.length || cachedLibrary.tabs.length) {
           setStatusMessage(
-            "Repo JSON sync unavailable. Loaded cached browser presets instead.",
+            repoPresetSyncEnabled
+              ? "Repo JSON sync unavailable. Loaded cached browser presets instead."
+              : "Published presets are unavailable. Loaded saved browser presets.",
           );
+        } else if (!repoPresetSyncEnabled) {
+          setStatusMessage("Published presets could not be loaded. Try refreshing the page.");
         }
       }
 
       presetsReadyRef.current = true;
       skipNextPresetSyncRef.current = true;
+      setPresetsLoading(false);
     };
 
     void bootstrapPresets();
@@ -249,6 +259,10 @@ export default function App() {
       setStatusMessage(
         "Preset updated in memory, but browser storage is full. Export JSON if you need to keep it.",
       );
+    }
+
+    if (!repoPresetSyncEnabled) {
+      return;
     }
 
     void (async () => {
@@ -820,6 +834,7 @@ export default function App() {
         activeTabId={activePresetTabId}
         allTabId={ALL_PRESET_TAB_ID}
         allPresets={favourites}
+        isLoading={presetsLoading}
         isOpen={presetsDrawerOpen}
         isShowingAllTab={activePresetTabId === ALL_PRESET_TAB_ID}
         onAssignTab={handleAssignPresetTab}
@@ -852,6 +867,7 @@ export default function App() {
           </button>
           <button
             className="utility-button is-emphasized"
+            disabled={presetsLoading}
             onClick={handleSaveCurrent}
             type="button"
           >
